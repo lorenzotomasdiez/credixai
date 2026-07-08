@@ -1,0 +1,16 @@
+[project]
+name = "credixai"
+version = "0.1.0"
+description = "Sistema de scoring crediticio explicable con copiloto agentico (CrediXAI)"
+authors = [
+    { name = "Lorenzo Tomas Diez", email = "lorenzotomasdiez@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = []
+
+[project.scripts]
+credixai = "credixai:main"
+
+[build-system]
+requires = ["uv_build>=0.11.17,<0.12.0"]
+build-backend = "uv_build"

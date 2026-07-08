@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# uv / venv
+.venv/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Datos (versionados con DVC, no con git)
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+
+# Modelos entrenados (versionados con MLflow/DVC, no con git)
+models/*
+!models/.gitkeep
+
+# Secretos y config local
+.env
+.env.*
+!.env.example
+
+# MLOps locales
+mlruns/
+mlflow.db
+
+# OS
+.DS_Store
