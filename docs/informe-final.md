@@ -290,7 +290,7 @@ La tabla de features completa (limpieza de `application_*` + ratios de negocio +
 
 ### 2.14 Formalización: `src/credixai/features.py` + `scripts/02_features.py` + DVC
 
-La lógica validada interactivamente en `notebooks/02_features.ipynb` se transcribió a funciones reutilizables en `src/credixai/features.py` (una por paso: `load_application`, `clean_days_employed`, `add_business_ratios`, `aggregate_*` por tabla relacional, `add_no_record_flags`, `encode_categoricals`, orquestadas por `build_feature_table`), y a un script ejecutable `scripts/02_features.py` (`uv run python scripts/02_features.py`) que corre el pipeline completo y persiste el resultado, cumpliendo el deliverable de `prd.md` §5.
+La lógica validada interactivamente en `notebooks/02_features.ipynb` se transcribió a funciones reutilizables en `src/credixai/features.py` (una por paso: `load_application`, `clean_days_employed`, `add_business_ratios`, `aggregate_*` por tabla relacional, `add_no_record_flags`, `encode_categoricals`, orquestadas por `build_feature_table`), y a un script ejecutable `scripts/02_features.py` (`uv run python scripts/02_features.py`) que corre el pipeline completo y persiste el resultado, cumpliendo el entregable esperado para la Tarea 2.
 Se corrió el script de punta a punta y reprodujo exactamente el mismo resultado que el notebook: 356,255 filas × 304 columnas.
 
 `data/raw` y `data/processed` se versionan con DVC (`dvc init`, `dvc add`): el repo trackea solo `data/raw.dvc`/`data/processed.dvc` (metadatos con hash), no los datos en sí, que siguen sin subirse a git.
@@ -301,7 +301,55 @@ Con esto, la Tarea 2 queda formalmente completa: imputación (§2.11), encoding 
 
 ## 3. Clustering / segmentación (`03_clustering.ipynb`)
 
-_Pendiente._
+### 3.1 Selección de features para clustering
+
+K-Means mide distancia euclídea entre puntos.
+Usar las 304 columnas de la tabla de features (Tarea 2) haría que las 140 columnas de one-hot, dispersas y en su mayoría en 0, dominaran la distancia por pura cantidad, aplastando el aporte de las variables continuas de negocio que ya mostraron señal real en las Tareas 1-2.
+Un perfil de riesgo con 304 dimensiones tampoco es utilizable por un risk manager: el objetivo es un puñado de segmentos describibles en una frase.
+
+Se seleccionaron 20 columnas en tres grupos: demográficas/capacidad de pago (edad, antigüedad laboral, ingreso, hijos, miembros de familia), ratios de negocio (`credit_to_income`, `annuity_to_income`, `credit_to_goods`) y un resumen de historial crediticio (la variable de mayor señal encontrada por tabla relacional en la Tarea 2: `bureau_active_count`, `bb_months_count_mean`, `prev_approval_rate`, `pos_dpd_rate`, `cc_utilization_mean`, `inst_late_rate`), más los 6 flags de "sin registro" ya construidos en la Tarea 2.
+
+### 3.2 Imputación y escalado
+
+Las variables de historial relacional conservan NaN por la misma razón documentada en la Tarea 2 (sin registro en esa tabla), con `bb_months_count_mean` y `cc_utilization_mean` como las de mayor faltante.
+Como el flag `*_no_record` correspondiente ya viaja como columna aparte, se imputó con la mediana (por robustez a outliers, dado que varias columnas tienen colas largas) sin perder esa señal.
+Se escaló con `StandardScaler`, requisito de K-Means: sin estandarizar, `AMT_INCOME_TOTAL` (rango de cientos de miles) dominaría por completo sobre variables de rango unitario como `bureau_active_count`.
+
+### 3.3 Elección de `k`
+
+Se probó `k` entre 2 y 8, con inertia sobre el dataset completo (307,511 filas) y silhouette estimado sobre una muestra de 10,000 puntos por costo computacional.
+El silhouette cayó fuerte de `k=2` (0.4515) a `k=3+` (0.134-0.148), y la inertia decreció de forma suave sin codo marcado.
+La hipótesis de trabajo era que ese salto en `k=2` podía ser un split trivial dominado por alguna variable binaria dispersa en vez de un perfil de riesgo real: se confirmó perfilando ese `k=2`, que separó clientes sin historial previo con Home Credit (cluster 0, 96-99% en los flags `prev_no_record`/`pos_no_record`/`inst_no_record`) de clientes con historial previo (cluster 1), un split real pero demasiado grueso para el objetivo de negocio.
+Entre `k=3..8` las diferencias de silhouette son chicas y probablemente ruido de la muestra; se eligió `k=5` por ser un número de segmentos manejable para uso de negocio, con silhouette (0.138) prácticamente igual al máximo observado (`k=6`, 0.148).
+
+### 3.4 Perfil de los 5 segmentos
+
+La tasa de default global sobre train es 8.07%.
+Los 5 segmentos muestran dispersión real de riesgo alrededor de ese valor, no solo diferencias de tamaño:
+
+- **Cluster 0 - mora histórica** (13,862 clientes, 4.5%): `pos_dpd_rate` 27.6% e `inst_late_rate` 24.8% (vs. ~1-3% en el resto de los segmentos), default 12.86% (+59% vs. la tasa global, el segmento de mayor riesgo).
+- **Cluster 4 - sin bureau externo, mayor carga relativa** (36,622, 11.9%): 100% `bureau_no_record`, ingreso más bajo (149,634), `annuity_to_income` más alto (0.195), default 9.75%.
+- **Cluster 1 - familias jóvenes** (71,956, 23.4%): edad más baja (36.8 años), 1.46 hijos en promedio (el más alto), comportamiento de pago normal, default 8.64% (cerca del promedio).
+- **Cluster 3 - núcleo estable, historial extenso** (168,980, 55.0%, el segmento más grande): historial extenso en todas las tablas relacionales (menor `*_no_record`), edad más alta (47.1 años), pocos hijos, default 7.29% (debajo del promedio).
+- **Cluster 2 - nuevos en Home Credit** (16,091, 5.2%): 96-99% sin historial previo (`prev`/`pos`/`inst`), ingreso más alto (207,618), default 5.82% (el segmento de menor riesgo).
+
+El hallazgo más contraintuitivo es que "sin historial previo" (cluster 2) resulta el segmento de *menor* riesgo, no mayor: son solicitantes de ingreso más alto que aún no tuvieron oportunidad de generar mora, a diferencia del cluster 0, que sí tiene historial y ese historial es de mora.
+Esto valida la Tarea 2 desde otro ángulo: la ausencia de registro no es un dato faltante neutro, es información de negocio distinta según la variable.
+
+### 3.5 Visualización PCA 2D
+
+Se proyectaron las 20 dimensiones a 2 componentes principales solo para graficar (el clustering en sí corrió sobre el espacio completo de 20 dimensiones).
+La varianza explicada por los 2 componentes es baja (24.7%), esperable al comprimir 20 dimensiones a 2, por lo que el gráfico subestima la separación real entre segmentos.
+Aun así, el cluster 2 ("nuevos en Home Credit") queda visualmente aislado del resto en el plano PC1-PC2, consistente con su perfil de `*_no_record` extremo, mientras que los otros 4 segmentos forman sub-nubes distinguibles pero más solapadas entre sí.
+
+### 3.6 Persistencia y formalización
+
+El clustering se ajustó (`fit`) solo sobre la porción train, para no ajustar transformaciones con datos de test.
+Para que el segmento esté disponible como feature de negocio sobre toda la población, se aplicó (`transform`/`predict`, no `fit`) el mismo `imputer`/`scaler`/`kmeans` ya ajustados a los 356,255 solicitantes (train + test).
+La distribución de segmentos en test resultó razonablemente similar a la de train (sin discrepancias grandes en ningún cluster), lo que es evidencia de que el pipeline generaliza y no quedó sobreajustado a particularidades de train.
+
+La lógica se transcribió a `src/credixai/clustering.py` (`fit_clustering`, `assign_clusters`, `build_segments`) y a un script ejecutable `scripts/03_clustering.py` (`uv run python scripts/03_clustering.py`), verificado de punta a punta: reprodujo el mismo shape (356,255 × 3) y los mismos tamaños de cluster exactos que el notebook.
+El resultado se persistió en `data/processed/segments.parquet` (`SK_ID_CURR`, `IS_TRAIN`, `cluster`) y se versionó con DVC junto al resto de `data/processed`.
 
 ---
 
