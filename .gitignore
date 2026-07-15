@@ -12,11 +12,7 @@ __pycache__/
 # Jupyter
 .ipynb_checkpoints/
 
-# Datos (versionados con DVC, no con git)
-data/raw/*
-!data/raw/.gitkeep
-data/processed/*
-!data/processed/.gitkeep
+# Datos (versionados con DVC, no con git; DVC administra sus propias entradas de ignore)
 
 # Modelos entrenados (versionados con MLflow/DVC, no con git)
 models/*

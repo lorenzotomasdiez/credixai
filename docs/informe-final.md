@@ -1,4 +1,4 @@
-# Informe final — CrediXAI
+# Informe final - CrediXAI
 
 **Propósito:** registro acumulativo de hallazgos durante el desarrollo, insumo directo para el informe ejecutivo (Tarea 6) y la documentación técnica (Tarea 7).
 
@@ -202,7 +202,7 @@ En vez de un único flag "algún mes en mora" (Tarea 1), generalizamos a 4 varia
 134,542 solicitantes tienen historial en `bureau_balance`, consistente con el ~30% de cobertura ya visto en la Tarea 1 (215,280 de 307,511 sin registro, 70.0%).
 
 Cruzando con `TARGET` (solo train): `bb_months_count_mean` es, inesperadamente, la variable más fuerte de toda la tabla (-0.0802, negativa), más fuerte incluso que `bureau_active_count` (0.0671) de `bureau.csv`.
-La dirección tiene sentido: a mayor duración promedio del historial mensual de un crédito, menor probabilidad de default, consistente con la lógica de que un historial crediticio más largo y sostenido es señal de perfil más establecido/confiable, en línea con por qué las fintechs de crédito al consumo en Argentina (contexto de negocio del PRD, §2.1) enfrentan mayor incertidumbre con solicitantes "thin file".
+La dirección tiene sentido: a mayor duración promedio del historial mensual de un crédito, menor probabilidad de default, consistente con la lógica de que un historial crediticio más largo y sostenido es señal de perfil más establecido/confiable, en línea con por qué las fintechs de crédito al consumo en Argentina enfrentan mayor incertidumbre con solicitantes "thin file" (sin o con poco historial crediticio).
 `bb_worst_dpd_level_max` (0.0360) y `bb_months_dpd_sum` (0.0248) confirman la dirección esperada (más mora, más riesgo) pero son más débiles.
 `bb_credits_with_history` (0.0061) aporta poca señal individual.
 Implica que la Tarea 2 debería priorizar `bb_months_count_mean` (o una variante, como antigüedad del crédito más antiguo) como feature candidata fuerte, algo que no se había explorado en la Tarea 1.
@@ -225,7 +225,7 @@ Probamos la alternativa propuesta ahí mismo: `pos_dpd_rate` (proporción de mes
 337,252 `SK_ID_CURR` con registro, consistente con la Tarea 1.
 
 Cruzando con `TARGET` (solo train): `pos_dpd_rate` (0.0306) no mejora sustancialmente a `pos_ever_dpd` (0.0334) de la Tarea 1, lo que confirma que la mora mensual de POS/efectivo, en cualquiera de sus formas simples, aporta señal débil y consistente.
-El hallazgo nuevo es `pos_credits_count` (-0.0405), más fuerte que cualquier variable de mora de esta tabla: a más créditos POS/efectivo distintos con Home Credit, menor probabilidad de default, en la misma línea que `bb_months_count_mean` (§2.4) y `prev_approval_rate` (§2.5) — historial de relación más extenso y sostenido con el prestamista se asocia a menor riesgo.
+El hallazgo nuevo es `pos_credits_count` (-0.0405), más fuerte que cualquier variable de mora de esta tabla: a más créditos POS/efectivo distintos con Home Credit, menor probabilidad de default, en la misma línea que `bb_months_count_mean` (§2.4) y `prev_approval_rate` (§2.5): historial de relación más extenso y sostenido con el prestamista se asocia a menor riesgo.
 `pos_months_count` (-0.0356) va en la misma dirección, esperable por estar correlacionado con `pos_credits_count`.
 Confirma un patrón que se repite en varias tablas internas de Home Credit: variables de "cantidad/antigüedad de relación" superan a las variables de mora cruda en señal individual.
 
@@ -263,14 +263,39 @@ Resultado: 356,255 filas × 158 columnas (127 de `application_*` + ratios + 31 r
 El `%` de nulos de las 31 columnas nuevas es consistente con la cobertura ya documentada por tabla en la Tarea 1: `credit_card_balance` sigue siendo la de menor cobertura (~71% nulo, la falta de tarjeta de crédito con Home Credit), seguida de `bureau_balance` (~62% nulo, coherente con el 70% sin registro visto sobre train en la Tarea 1), `bureau` (~14% nulo), `previous_application`/`POS_CASH_balance`/`installments_payments` (~5% nulo cada una, las de mejor cobertura por ser historial directo con Home Credit).
 Confirma que la estrategia de imputación de la Tarea 2 va a necesitar tratar el nulo como información (especialmente en `credit_card_balance` y `bureau_balance`, con más de 60% de solicitantes sin registro) y no solo rellenar con un valor neutro.
 
-### 2.10 Persistencia y estado de la Tarea 2
+### 2.10 Chequeo intermedio antes de imputación/encoding
 
-La tabla de features (356,255 filas × 158 columnas) se persiste en `data/processed/features.parquet` (no versionado en git, ver `.gitignore`), incluyendo `IS_TRAIN` y `TARGET` (NaN en test) para poder separar después.
+Antes de resolver imputación y encoding (§2.11-2.12), verificamos con un assert que `SK_ID_CURR` seguía siendo único tras el merge de las 6 tablas relacionales (356,255 filas × 158 columnas: 127 de `application_*` + ratios + 31 relacionales).
 El chequeo de fuga de datos queda cubierto por construcción: todas las variables agregadas provienen de columnas que ya existían en las tablas fuente antes de la fecha de la solicitud actual (las columnas `DAYS_*` del dataset son siempre negativas o relativas a la solicitud), y ninguna agregación usó `TARGET` como insumo.
 Se agregó `pyarrow` como dependencia del proyecto para poder escribir Parquet.
 
-Queda pendiente para completar formalmente la Tarea 2 según `prd.md` §5: (a) imputación explícita (no solo relevamiento de nulos) con estrategias diferenciadas por tipo de nulo, ya identificadas en la Tarea 1 y en esta sección; (b) encoding de variables categóricas; (c) formalizar el notebook en un script `02_features.py` reproducible (`Pipeline`/`ColumnTransformer` de Scikit-learn) según el deliverable del PRD; (d) versionado del feature store con DVC.
-Estos puntos se abordan en la continuación de la Tarea 2 antes de pasar a clustering (Tarea 3).
+### 2.11 Estrategia de imputación
+
+**Decisión de diseño.** El modelo primario del proyecto es XGBoost, que maneja `NaN` nativamente: en cada split, aprende hacia qué rama mandar los valores faltantes durante el entrenamiento, sin requerir un valor sustituto.
+Imputar a ciegas antes de XGBoost destruiría la señal de "sin registro" que la Tarea 1 identificó como informativa (por ejemplo, el 72% de solicitantes sin `credit_card_balance` no es un faltante al azar: es que esa persona no tuvo tarjeta de crédito con Home Credit).
+Por eso: para XGBoost se dejan los `NaN` tal cual y se agregan flags booleanos explícitos de "sin registro" por tabla relacional (una feature en sí misma, más allá de lo que el árbol infiera del NaN); la imputación numérica que sí necesita el baseline de Regresión Logística se resuelve aparte, con un `Pipeline`/`ColumnTransformer` de Scikit-learn específico para ese modelo, sin tocar la tabla de features cruda que consume XGBoost.
+
+Se agregaron 6 flags (`bureau_no_record`, `bb_no_record`, `prev_no_record`, `pos_no_record`, `cc_no_record`, `inst_no_record`), cuyas proporciones confirman exactamente la cobertura por tabla ya documentada: `cc_no_record` 70.9%, `bb_no_record` 62.2%, `bureau_no_record` 14.2%, `pos_no_record` 5.3%, `prev_no_record` 4.9%, `inst_no_record` 4.7%.
+
+### 2.12 Encoding de variables categóricas
+
+`application_train`/`application_test` tienen 17 columnas de tipo `object`, 16 categóricas reales más `prev_ever_refused` (un flag booleano de 3 estados, True/False/sin dato, que quedó tipado como `object` por el `NaN` introducido en el `left merge`; se trató aparte, mapeado a 0/1).
+La cardinalidad de las 16 categóricas reales es manejable: entre 2 y 58 valores únicos (`ORGANIZATION_TYPE` es la de mayor cardinalidad).
+Se aplicó one-hot (`pd.get_dummies`, con `dummy_na=True` para preservar el faltante como categoría explícita en vez de perderlo) a las 16, sin agrupar categorías raras a priori: para un modelo de árboles (XGBoost) el volumen de columnas no penaliza de la misma forma que en un modelo lineal, y se prioriza no perder información sobre simplicidad.
+El one-hot agregó 140 columnas nuevas (de 164 a 304 columnas totales).
+
+### 2.13 Persistencia final
+
+La tabla de features completa (limpieza de `application_*` + ratios de negocio + agregaciones de las 6 tablas relacionales + flags de "sin registro" + one-hot de categóricas) se guardó en `data/processed/features.parquet`: 356,255 filas × 304 columnas.
+
+### 2.14 Formalización: `src/credixai/features.py` + `scripts/02_features.py` + DVC
+
+La lógica validada interactivamente en `notebooks/02_features.ipynb` se transcribió a funciones reutilizables en `src/credixai/features.py` (una por paso: `load_application`, `clean_days_employed`, `add_business_ratios`, `aggregate_*` por tabla relacional, `add_no_record_flags`, `encode_categoricals`, orquestadas por `build_feature_table`), y a un script ejecutable `scripts/02_features.py` (`uv run python scripts/02_features.py`) que corre el pipeline completo y persiste el resultado, cumpliendo el deliverable de `prd.md` §5.
+Se corrió el script de punta a punta y reprodujo exactamente el mismo resultado que el notebook: 356,255 filas × 304 columnas.
+
+`data/raw` y `data/processed` se versionan con DVC (`dvc init`, `dvc add`): el repo trackea solo `data/raw.dvc`/`data/processed.dvc` (metadatos con hash), no los datos en sí, que siguen sin subirse a git.
+Por ahora el cache de DVC es local, sin remote configurado (decisión explícita: alcance de este proyecto no incluye infraestructura de almacenamiento compartido); se documentó en `README.md` cómo re-trackear datos con `dvc add` para quien clone el repo.
+Con esto, la Tarea 2 queda formalmente completa: imputación (§2.11), encoding (§2.12), script reproducible y DVC (esta sección).
 
 ---
 
