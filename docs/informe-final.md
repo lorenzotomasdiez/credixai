@@ -355,7 +355,55 @@ El resultado se persistió en `data/processed/segments.parquet` (`SK_ID_CURR`, `
 
 ## 4. Modelado supervisado
 
-_Pendiente._
+### 4.1 Separación de datos y protocolo de validación
+
+El objetivo es predecir `TARGET` (probabilidad de default) sobre la tabla de features de la Tarea 2.
+Del total de 356,255 solicitantes, 307,511 tienen `TARGET` conocido (partición de entrenamiento) y 48,744 no (partición de test de Kaggle, reservada exclusivamente para un eventual submission al leaderboard).
+Como el test de Kaggle no trae etiquetas, no puede usarse para medir performance del modelo.
+Por eso se separó, dentro de la partición con etiqueta, un holdout de validación estratificado (80/20, manteniendo la proporción de 8.07% de default en ambos splits) para poder evaluar antes de tocar el test de Kaggle.
+
+### 4.2 Métricas de evaluación
+
+Se definió una función de evaluación única, reutilizada en todos los modelos, con cuatro métricas: ROC-AUC (primaria, robusta al desbalanceo), PR-AUC (relevante dado que solo el 8.07% de los casos son positivos), KS statistic (separación máxima entre las distribuciones acumuladas de buenos y malos pagadores, estándar en scoring crediticio) y Brier score (calibración: qué tan confiables son las probabilidades predichas, no solo su capacidad de ranking).
+
+### 4.3 Baseline: Regresión Logística
+
+Como piso de referencia interpretable por diseño se entrenó una Regresión Logística, con imputación por mediana y escalado estándar (requisitos de un modelo lineal basado en distancia/magnitud) y `class_weight="balanced"` para compensar el desbalanceo.
+Resultado sobre el holdout: ROC-AUC 0.7637, PR-AUC 0.2488, KS 0.3982, Brier 0.1963.
+
+### 4.4 Modelo primario: XGBoost
+
+Se entrenó XGBoost como modelo primario, que maneja valores faltantes nativamente y es invariante a la escala de las features, por lo que no requiere el preprocesamiento del baseline.
+El ajuste de hiperparámetros se hizo de forma incremental y documentada, contrastando siempre contra el mismo holdout:
+
+- **Corrida inicial** (`scale_pos_weight` = razón negativos/positivos ≈ 11.4, para compensar el desbalanceo): ROC-AUC 0.7802, pero Brier 0.1751, muy por encima del objetivo de calibración.
+- **Sin `scale_pos_weight`**: la hipótesis era que la reponderación distorsionaba las probabilidades sin aportar al ranking. Se confirmó: Brier bajó a 0.0660 y el ROC-AUC mejoró levemente a 0.7813.
+- **Más árboles hasta converger**: el entrenamiento anterior no había activado el early stopping (seguía mejorando al cortar). Con más rondas convergió de verdad (mejor iteración 1343 de 3000) en ROC-AUC 0.7819, con una ganancia marginal ya mínima.
+- **Árboles más profundos** (`max_depth` 7 en vez de 5): no mejoró (ROC-AUC 0.7815) y empezó a sobreajustar antes (mejor iteración 834 de 4000), señal de que la profundidad no era el cuello de botella.
+
+Se optó por la configuración más simple (`max_depth=5`, sin `scale_pos_weight`) al no encontrar mejoras del tuneo manual adicional.
+
+### 4.5 Validación cruzada y lectura honesta del resultado
+
+Para descartar que el resultado del holdout fuera un artefacto de ese split particular, se corrió una validación cruzada estratificada de 5 folds sobre toda la partición de entrenamiento: ROC-AUC 0.7802 ± 0.0032 (rango entre folds: 0.7758-0.7848).
+Este resultado confirma que el ROC-AUC real del modelo se ubica de forma estable en torno a 0.78, una mejora clara sobre el baseline (+1.6 puntos) pero por debajo del objetivo de 0.79 planteado para el proyecto.
+La brecha remanente no cedió ante el tuneo manual de hiperparámetros ya descripto; cerrarla probablemente requiera trabajo adicional de feature engineering o ensembles, que se señala como línea de trabajo futura en las conclusiones.
+El modelo final se reentrenó sobre el 100% de la partición de entrenamiento (sin holdout, ya no necesario para decidir hiperparámetros), con una cantidad fija de árboles (1086, el promedio de las mejores iteraciones observadas en el holdout y en los 5 folds de la validación cruzada) en lugar de early stopping.
+
+### 4.6 Importancia de features y hallazgo de fairness
+
+Se calculó la importancia de features del modelo final por `gain` (contribución promedio a la reducción de la función de pérdida), como insumo directo para la explicabilidad de la Tarea 5.
+`EXT_SOURCE_2` y `EXT_SOURCE_3` encabezan el ranking, consistente con la correlación más fuerte con `TARGET` ya identificada en el EDA de la Tarea 1.
+El resto del top 20 combina variables demográficas, ratios de negocio y varias agregaciones relacionales construidas en la Tarea 2 (utilización de tarjeta, tasa de rechazos previos, tasa de atrasos en cuotas), lo que confirma que ese trabajo de feature engineering aporta señal real.
+
+Un hallazgo a marcar para la Tarea 5: `CODE_GENDER_M` y `CODE_GENDER_F` aparecen en el puesto 4 y 9 del ranking de importancia, con una contribución comparable a la de variables de negocio fuertes.
+El género no es aquí solamente un atributo proxy a auditar externamente: es una feature que el modelo usa de forma directa para predecir.
+Esto hace que la auditoría de fairness de la próxima tarea sea necesaria, no solo recomendable, para determinar si el modelo está usando el género como proxy de otra señal correlacionada o si introduce una disparidad de trato que deba corregirse.
+
+### 4.7 Persistencia y tracking
+
+El baseline y el modelo final de XGBoost se registraron en MLflow (hiperparámetros, las 4 métricas y el modelo serializado como artefacto), usando `mlflow-skinny` con un backend SQLite local, dado que el paquete `mlflow` completo todavía no soporta la versión de pandas usada en el proyecto.
+La lógica se transcribió a `src/credixai/modeling.py` (`build_baseline`, `build_xgboost`, `evaluate`) y a un script ejecutable `scripts/04_modeling.py` (`uv run python scripts/04_modeling.py`), verificado end-to-end: reprodujo las métricas del baseline de forma exacta y las del modelo XGBoost final con una diferencia mínima (ROC-AUC 0.7815 contra 0.7819), coherente con la variabilidad ya observada entre folds de la validación cruzada.
 
 ---
 
