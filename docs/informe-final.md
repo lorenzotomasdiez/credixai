@@ -632,3 +632,50 @@ Dos causas explican la brecha con los umbrales, verificadas puntualmente:
 
 Se probaron dos variantes del prompt de generación (respuestas más cortas, y respuestas que abren con una oración que reusa los términos de la pregunta) buscando subir answer relevancy; ambas empeoraron el resultado agregado en vez de mejorarlo, así que se descartaron y se mantuvo el prompt original, que fue el que mejor performó en las cuatro corridas.
 Conclusión: el sistema cumple RF-5 (cita documento + fragmento, verificado por test y manualmente) y produce respuestas groundeadas y correctas verificadas manualmente, pero no cumple de forma confiable el umbral de answer relevancy de RNF-8 con la configuración actual; se documenta como limitación abierta en vez de forzar una corrida favorable o relajar el umbral sin justificación.
+
+### 8.6 Copiloto agéntico (RF-6)
+
+Sexto paso de la secuencia.
+Depende de RAG (paso 5, ya cerrado) y de las tools ML/XAI, expuestas como endpoints FastAPI (`/score`, `/explain`) desde el paso 2 en vez de importarse directamente.
+
+**Diseño, antes de escribir código.**
+Antes de implementar se definió explícitamente el grafo de estados, las tools, el contrato del loop evaluator-optimizer y el mecanismo de exposición, siguiendo el patrón orchestrator-workers de Anthropic ("Building Effective Agents") ya elegido en el PRD.
+Dos decisiones de diseño se dejaron abiertas y se resolvieron con el usuario antes de tocar código:
+
+1. **Orquestador con tool-calling real de un LLM**, en vez de un router determinista por reglas de negocio.
+   Más fiel al patrón orchestrator-workers citado en el PRD y más representativo de un sistema agéntico real, a costa de mayor no-determinismo y más tokens por caso, aceptado explícitamente como trade-off.
+2. **Un reintento del loop evaluator-optimizer, después escalar a revisión humana**, en vez de reintentar varias veces.
+   Evita gastar llamadas LLM en reintentos indefinidos sobre un caso genuinamente problemático (por ejemplo, uno que mencione atributos protegidos de forma persistente).
+
+**Grafo (LangGraph, `credixai/copilot/graph.py`).**
+`orchestrator` llama a un LLM con tool-calling real (mismo modelo y provider que RAG, `openai/gpt-4o-mini` vía OpenRouter) que decide dinámicamente qué tools invocar según el caso: siempre `score_application`, y solo si la decisión es `alto_riesgo`, también `explain_shap` (reason codes) y `retrieve_policy` (cita de política de adverse action).
+Un caso `riesgo_aceptable` puede terminar sin llamar a las otras dos tools, verificado en producción real (ver más abajo).
+`tool_executor` ejecuta las tool calls pedidas y vuelve a `orchestrator`, que repite hasta no pedir más tools (con un tope de 6 rondas como salvaguarda contra un loop infinito, nunca alcanzado en las pruebas).
+`draft_memo` redacta el memo en lenguaje natural a partir de los datos ya calculados por las tools (score, reason codes, citas): el LLM narra, no elige razones ni inventa citas, mismo principio anti-alucinación que `PolicyAnswerer` del RAG (citas derivadas de datos, no parseadas de texto libre).
+`evaluator` tiene dos capas: un precheck determinista sin LLM (`run_precheck`, cantidad de reason codes ≤ 4, denylist de keywords de atributos protegidos como red de seguridad extra, al menos una cita de política si la decisión es `alto_riesgo`, memo no vacío) y, solo si el precheck pasa, un juez LLM (`llm_judge`) que verifica que el memo no afirme nada no soportado por el contexto.
+Si el memo es rechazado, se redacta una vez más con el feedback del evaluador (`draft_memo` reutilizado con `revision_feedback`, sin un nodo "optimizer" separado); si vuelve a fallar, el estado queda `needs_human_review` y se devuelve igual, con el motivo del rechazo, en vez de reintentar indefinidamente.
+
+**Tools sobre HTTP, no imports directos.**
+`score_application`, `explain_shap` y `retrieve_policy` (`credixai/copilot/tools.py`) llaman a los endpoints REST correspondientes vía `httpx`, no a `ScoringService`/`RagPipeline` directamente, siguiendo la recomendación explícita del PRD para este paso.
+En producción, el cliente HTTP apunta a la propia app FastAPI vía `httpx.ASGITransport`, evitando un segundo proceso escuchando en red real; el mismo mecanismo se usa en los tests, contra una app FastAPI de juguete.
+Esto obligó a que las tools y el grafo completo sean async: `httpx.ASGITransport` solo soporta clientes async, y el endpoint `/copilot/memo/{sk_id_curr}` invoca el grafo con `await graph.ainvoke(...)`.
+
+**TDD.**
+Mismo patrón que RAG: cada módulo se testeó antes de implementarse, confirmando rojo por `ModuleNotFoundError` o `AttributeError` antes de escribir el código.
+Orden: precheck determinista del evaluator (sin LLM, el más simple) → `OpenRouterClient.chat_with_tools` (tool-calling, con un stub del cliente OpenAI interno) → tools HTTP (contra una app FastAPI de juguete) → `draft_memo` y `llm_judge` (con `chat_fn` inyectado, mismo patrón que `PolicyAnswerer`/`LLMReranker`) → el grafo completo compilado, con el orquestador y el `chat_fn` scripteados para forzar cada rama del loop evaluator-optimizer (aprobado directo, rechazado + reintento + aprobado, rechazado dos veces + escalado a revisión humana, y el camino que salta `explain_shap`/`retrieve_policy`) → el endpoint HTTP, con el grafo inyectado vía `dependency_overrides`.
+La función `strip_markdown_fences`, escrita originalmente para el reranker del RAG, se extrajo a `credixai/llm_json.py` para reutilizarla en `llm_judge`, evitando duplicar la misma lógica de parseo tolerante a fences de markdown en dos módulos.
+
+**Bug real encontrado y corregido.**
+La primera prueba end-to-end contra OpenRouter real falló con `400 Bad Request: Missing required parameter: 'messages[...].tool_calls[0].type'`.
+El mensaje de assistant que se reinyecta en la conversación para el siguiente turno del orquestador tenía una forma simplificada (`{"id", "name", "arguments"}`) que no coincidía con el schema real de tool calls de la API de OpenAI (`{"id", "type": "function", "function": {"name", "arguments": "<json string>"}}`), algo que ningún test unitario podía haber detectado porque los stubs de `chat_with_tools_fn` construían directamente objetos `ChatWithToolsResult`/`ToolCall`, sin pasar por la serialización real.
+Se corrigió `orchestrator` en `graph.py` para construir el mensaje con el schema exacto de OpenAI, y se re-verificó contra OpenRouter real.
+Este bug es un buen ejemplo de por qué el patrón del proyecto es no dar un paso por cerrado sin una verificación real de punta a punta además de los tests unitarios con stubs: el aislamiento que hace testeable la lógica es exactamente lo que puede ocultar un desajuste en el contrato con el servicio real.
+
+**Endpoint y verificación real de punta a punta.**
+`POST /copilot/memo/{sk_id_curr}` en `app/api.py`, mismo patrón que `/score`, `/explain` y `/rag/query`: el grafo se inyecta vía `get_copilot_graph()` con `lru_cache`, y los tests HTTP (`tests/test_api_copilot_http.py`) usan `dependency_overrides` con un grafo fake, sin llamar a OpenRouter real.
+Se verificó manualmente contra el sistema real completo (modelo entrenado, Qdrant con el corpus ingestado, OpenRouter real), dos casos:
+
+- `sk_id_curr=100002` (`alto_riesgo`): el orquestador llamó a las tres tools en secuencia (`score_application` → `explain_shap` → `retrieve_policy`), el memo generado citó correctamente `Adverse action y reason codes` y `Política interna de originación y equidad de CrediXAI`, y el juez LLM rechazó la primera versión por una imprecisión real en cómo describía el umbral y por no citar las fuentes de forma explícita; el memo se redactó una segunda vez con ese feedback y volvió a ser rechazado por el mismo motivo, quedando en `needs_human_review`, el comportamiento esperado del loop evaluator-optimizer ante un caso que genuinamente no mejoró con un solo reintento.
+- `sk_id_curr=100003` (`riesgo_aceptable`): el orquestador llamó únicamente a `score_application` (8 segundos en total, contra ~64 segundos del caso anterior), sin citas, y el memo fue aprobado en el primer intento, confirmando que la decisión dinámica de qué tools llamar funciona como se diseñó.
+
+Se agregó `tests/copilot/test_copilot_integration.py` (marcado `integration`, excluido del run rápido) sobre el camino `riesgo_aceptable`, para mantener la verificación automática de punta a punta razonablemente rápida; el camino `alto_riesgo` completo, con las tres tools y el loop evaluator-optimizer, quedó verificado manualmente como se describe arriba.

@@ -7,9 +7,9 @@ reranking, ya al usar el mismo pattern de chat_fn inyectado.
 """
 
 import json
-import re
 from typing import Callable
 
+from credixai.llm_json import strip_markdown_fences
 from credixai.rag.chunking import Chunk
 
 ChatFn = Callable[[list[dict]], str]
@@ -22,11 +22,6 @@ _SYSTEM_PROMPT = (
     "ordenando los ids de mas a menos relevante para responder la pregunta. "
     "No incluyas texto fuera del JSON."
 )
-
-
-def _strip_markdown_fences(text: str) -> str:
-    match = re.search(r"```(?:json)?\s*(.*?)\s*```", text, re.DOTALL)
-    return match.group(1) if match else text
 
 
 class LLMReranker:
@@ -43,7 +38,7 @@ class LLMReranker:
 
         raw_response = self._chat_fn(messages)
         try:
-            parsed = json.loads(_strip_markdown_fences(raw_response))
+            parsed = json.loads(strip_markdown_fences(raw_response))
             ranked_ids = parsed["ranked_chunk_ids"]
         except (json.JSONDecodeError, KeyError, TypeError) as exc:
             raise ValueError(f"Respuesta de reranking invalida: {raw_response!r}") from exc

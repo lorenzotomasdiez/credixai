@@ -28,8 +28,6 @@ flowchart LR
         docker["Contenedores\nDocker"]
         cicd["CI/CD\nGitHub Actions"]
         rag["RAG normativo\nQdrant + OpenRouter"]
-    end
-    subgraph pending_ext["Extensiones de portfolio (pendientes)"]
         agent["Copiloto\nLangGraph"]
     end
     ml --> api
@@ -38,8 +36,8 @@ flowchart LR
     serving --> docker
     docker --> cicd
     rag --> api
-    agent -.-> api
-    agent -.-> rag
+    agent --> api
+    agent --> rag
 ```
 
 Diagrama de componentes completo (incluidas las extensiones planificadas) y decisiones de arquitectura (ADRs) en `docs/`.
@@ -150,6 +148,21 @@ Evaluación con RAGAS (faithfulness, answer relevancy), resultado y limitaciones
 
 ```
 uv run python scripts/07_rag_eval.py
+```
+
+## Copiloto agentico
+
+`POST /copilot/memo/{sk_id_curr}` investiga una solicitud y redacta un borrador de memo crediticio con reason codes y citas de politica.
+Orquestador LangGraph con tool-calling real (patron orchestrator-workers): decide dinamicamente que tools llamar segun el caso (`score_application`, y si es alto riesgo tambien `explain_shap` y `retrieve_policy`), todas via HTTP contra esta misma API en vez de imports directos.
+Un loop evaluator-optimizer (precheck deterministico + juez LLM) revisa el memo antes de entregarlo: si no pasa, se redacta una vez mas con el feedback; si vuelve a fallar, la respuesta queda en `status: needs_human_review` en vez de reintentar indefinidamente.
+
+Mismos requisitos que RAG normativo (Qdrant + `OPENROUTER_API_KEY`), mas el modelo ya entrenado:
+
+```
+docker compose up -d qdrant
+uv run python scripts/06_rag_ingest.py
+uv run uvicorn app.api:app --reload
+curl -X POST http://localhost:8000/copilot/memo/100002
 ```
 
 ## Datos

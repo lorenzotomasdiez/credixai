@@ -251,7 +251,7 @@ El orden que sigue está definido por dependencia técnica real entre componente
 3. **Docker.** (Completado 2026-07-16.) Containeriza FastAPI + Streamlit; prerequisito de un build reproducible y del paso de CI/CD siguiente.
 4. **CI/CD (GitHub Actions).** (Completado 2026-07-16.) Lint + pytest (paso 1) + build de Docker (paso 3). No tiene sentido antes, porque no habría nada real que ejecutar en el pipeline.
 5. **RAG normativo (corpus BCRA/Basilea, vector DB, hybrid search + rerank, RAGAS).** (Completado 2026-07-16, con una limitación documentada: RNF-8 answer relevancy no llega al umbral de forma estable, ver `docs/informe-final.md` sección 8.5.) Técnicamente independiente de los pasos 1–4; puede desarrollarse en paralelo, pero debe estar resuelto antes del copiloto agéntico (paso 6), que lo consume como tool (`retrieve_policy`).
-6. **Copiloto agéntico (LangGraph).** Depende de RAG (paso 5) y de las tools ML/XAI ya existentes, idealmente ya expuestas como endpoints FastAPI (paso 2) en vez de imports directos.
+6. **Copiloto agéntico (LangGraph).** (Completado 2026-07-16.) Depende de RAG (paso 5) y de las tools ML/XAI ya existentes, idealmente ya expuestas como endpoints FastAPI (paso 2) en vez de imports directos.
 7. **Observabilidad LLM (Langfuse).** Se integra junto con el copiloto agéntico (paso 6), del que traza las llamadas a LLM; no tiene objeto antes de que exista un agente que producir trazas.
 8. **Monitoreo de drift (Evidently).** Depende de tener un flujo de scoring real corriendo (FastAPI, paso 2) sobre el cual medir drift a lo largo del tiempo; es el último eslabón porque necesita datos generados por los pasos anteriores.
 

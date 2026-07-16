@@ -7,13 +7,28 @@ seccion RAG): openai/text-embedding-3-small para embeddings, openai/gpt-4o-mini
 para chat/rerank.
 """
 
+import json
 import os
+from dataclasses import dataclass, field
 
 from openai import OpenAI
 
 DEFAULT_CHAT_MODEL = "openai/gpt-4o-mini"
 DEFAULT_EMBEDDING_MODEL = "openai/text-embedding-3-small"
 _BASE_URL = "https://openrouter.ai/api/v1"
+
+
+@dataclass(frozen=True)
+class ToolCall:
+    id: str
+    name: str
+    arguments: dict
+
+
+@dataclass(frozen=True)
+class ChatWithToolsResult:
+    content: str | None
+    tool_calls: list[ToolCall] = field(default_factory=list)
 
 
 class OpenRouterClient:
@@ -43,3 +58,14 @@ class OpenRouterClient:
     def chat(self, messages: list[dict]) -> str:
         response = self._client.chat.completions.create(model=self._chat_model, messages=messages)
         return response.choices[0].message.content
+
+    def chat_with_tools(self, messages: list[dict], tools: list[dict]) -> ChatWithToolsResult:
+        response = self._client.chat.completions.create(
+            model=self._chat_model, messages=messages, tools=tools
+        )
+        message = response.choices[0].message
+        tool_calls = [
+            ToolCall(id=tc.id, name=tc.function.name, arguments=json.loads(tc.function.arguments))
+            for tc in (message.tool_calls or [])
+        ]
+        return ChatWithToolsResult(content=message.content, tool_calls=tool_calls)

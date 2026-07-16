@@ -1,14 +1,18 @@
 """API REST (RF-8, paso 2 de prd.md 9.1) para CrediXAI.
 
-Entrypoint delgado sobre credixai.api.ScoringService y
-credixai.rag.pipeline.RagPipeline, mismo patron de separacion
-logica/entrypoint que app/dashboard.py. Expone /score y /explain sobre el
-modelo final de la Tarea 4, reutilizando SHAP y reason codes de la Tarea 5
-sin reimplementar nada, y /rag/query (RF-5, paso 5 de prd.md 9.1) sobre el
-corpus normativo.
+Entrypoint delgado sobre credixai.api.ScoringService,
+credixai.rag.pipeline.RagPipeline y credixai.copilot.graph, mismo patron de
+separacion logica/entrypoint que app/dashboard.py. Expone /score y /explain
+sobre el modelo final de la Tarea 4, reutilizando SHAP y reason codes de la
+Tarea 5 sin reimplementar nada; /rag/query (RF-5, paso 5 de prd.md 9.1)
+sobre el corpus normativo; y /copilot/memo/{sk_id_curr} (RF-6, paso 6 de
+prd.md 9.1), el copiloto agentico LangGraph que consume /score, /explain y
+/rag/query como tools via HTTP (contra esta misma app, sin un segundo
+proceso) para redactar un memo crediticio con citas de politica.
 
-Requiere haber corrido antes scripts/02_features.py y, para /rag/query,
-scripts/06_rag_ingest.py con Qdrant corriendo y OPENROUTER_API_KEY seteada.
+Requiere haber corrido antes scripts/02_features.py y, para /rag/query y
+/copilot/memo, scripts/06_rag_ingest.py con Qdrant corriendo y
+OPENROUTER_API_KEY seteada.
 
 Uso:
     uv run fastapi run app/api.py
@@ -16,14 +20,17 @@ Uso:
 
 import json
 import os
-from functools import lru_cache
+from functools import lru_cache, partial
 
+import httpx
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field
 from qdrant_client import QdrantClient
 
 from credixai.api import ScoringService
+from credixai.copilot.graph import build_graph, initial_state
+from credixai.copilot.tools import explain_shap, retrieve_policy, score_application
 from credixai.dashboard import load_features, train_full_model
 from credixai.rag.chunking import Chunk
 from credixai.rag.generation import PolicyAnswerer
@@ -77,6 +84,18 @@ def get_rag_pipeline() -> RagPipeline:
     return RagPipeline(retriever=retriever, answerer=answerer)
 
 
+@lru_cache(maxsize=1)
+def get_copilot_graph():
+    client = OpenRouterClient()
+    http_client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://copilot-internal")
+    tool_fns = {
+        "score_application": partial(score_application, http_client),
+        "explain_shap": partial(explain_shap, http_client),
+        "retrieve_policy": partial(retrieve_policy, http_client),
+    }
+    return build_graph(tool_fns=tool_fns, chat_with_tools_fn=client.chat_with_tools, chat_fn=client.chat)
+
+
 class ScoreResponse(BaseModel):
     sk_id_curr: int
     probability: float
@@ -108,6 +127,15 @@ class RagCitationResponse(BaseModel):
 class RagQueryResponse(BaseModel):
     answer: str
     citations: list[RagCitationResponse]
+
+
+class CopilotMemoResponse(BaseModel):
+    sk_id_curr: int
+    decision: str
+    memo: str
+    citations: list[RagCitationResponse]
+    status: str
+    evaluator_feedback: str | None = None
 
 
 @app.get("/health")
@@ -143,4 +171,22 @@ def rag_query(request: RagQueryRequest, pipeline: RagPipeline = Depends(get_rag_
     return RagQueryResponse(
         answer=result.answer,
         citations=[RagCitationResponse(**c.__dict__) for c in result.citations],
+    )
+
+
+@app.post("/copilot/memo/{sk_id_curr}", response_model=CopilotMemoResponse)
+async def copilot_memo(sk_id_curr: int, graph=Depends(get_copilot_graph)) -> CopilotMemoResponse:
+    try:
+        result = await graph.ainvoke(initial_state(sk_id_curr))
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(status_code=exc.response.status_code, detail=f"SK_ID_CURR {sk_id_curr} no encontrado")
+
+    citations = (result.get("policy_result") or {}).get("citations", [])
+    return CopilotMemoResponse(
+        sk_id_curr=sk_id_curr,
+        decision=result["score"]["decision"],
+        memo=result["memo"],
+        citations=[RagCitationResponse(**c) for c in citations],
+        status=result["status"],
+        evaluator_feedback=result.get("evaluator_feedback"),
     )
