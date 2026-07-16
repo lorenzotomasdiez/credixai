@@ -1,4 +1,4 @@
-"""Tests para credixai.rag.vector_store (paso 5, prd.md 9.1).
+"""Tests para credixai.rag.vector_store (paso 5).
 
 TDD: se escribe antes que credixai/rag/vector_store.py. Corre contra un
 QdrantClient real en modo ":memory:" (sin red, sin docker), asi que este

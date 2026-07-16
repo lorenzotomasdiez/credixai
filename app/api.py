@@ -1,12 +1,12 @@
-"""API REST (RF-8, paso 2 de prd.md 9.1) para CrediXAI.
+"""API REST (RF-8, paso 2) para CrediXAI.
 
 Entrypoint delgado sobre credixai.api.ScoringService,
 credixai.rag.pipeline.RagPipeline y credixai.copilot.graph, mismo patron de
 separacion logica/entrypoint que app/dashboard.py. Expone /score y /explain
 sobre el modelo final de la Tarea 4, reutilizando SHAP y reason codes de la
-Tarea 5 sin reimplementar nada; /rag/query (RF-5, paso 5 de prd.md 9.1)
-sobre el corpus normativo; y /copilot/memo/{sk_id_curr} (RF-6, paso 6 de
-prd.md 9.1), el copiloto agentico LangGraph que consume /score, /explain y
+Tarea 5 sin reimplementar nada; /rag/query (RF-5, paso 5)
+sobre el corpus normativo; y /copilot/memo/{sk_id_curr} (RF-6, paso 6),
+el copiloto agentico LangGraph que consume /score, /explain y
 /rag/query como tools via HTTP (contra esta misma app, sin un segundo
 proceso) para redactar un memo crediticio con citas de politica.
 

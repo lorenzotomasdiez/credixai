@@ -1,4 +1,4 @@
-"""Tests para src/credixai/api.py: ScoringService (paso 2, prd.md 9.1).
+"""Tests para src/credixai/api.py: ScoringService (paso 2).
 
 TDD: este archivo se escribe antes que credixai/api.py. Define el contrato
 de ScoringService con datos sinteticos (sin cargar el dataset real ni

@@ -1,4 +1,4 @@
-"""Tarea 5 (prd.md S5): SHAP global/local, reason codes de adverse action y
+"""Tarea 5: SHAP global/local, reason codes de adverse action y
 auditoria de fairness (Fairlearn) sobre el modelo XGBoost final de la Tarea 4.
 
 Requiere haber corrido antes scripts/02_features.py. Los contrafacticos (DiCE)

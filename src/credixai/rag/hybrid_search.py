@@ -1,4 +1,4 @@
-"""Reciprocal Rank Fusion para combinar busqueda densa (Qdrant) y BM25 (paso 5, prd.md 9.1).
+"""Reciprocal Rank Fusion para combinar busqueda densa (Qdrant) y BM25 (paso 5).
 
 RRF combina rankings heterogeneos (embeddings vs. keyword matching) sin
 necesitar normalizar sus escalas de score, que no son comparables entre si.

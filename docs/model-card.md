@@ -16,7 +16,7 @@ Fuente de los números: `docs/informe-final.md` (secciones 4 y 5), reproducibles
 ## 2. Uso previsto
 
 - **Uso primario:** estimar la probabilidad de que un solicitante de crédito incumpla sus pagos (default), como insumo de apoyo a la decisión de un analista humano, no como decisión automática.
-- **Usuarios previstos:** analistas de crédito, risk managers y auditores/reguladores de una fintech simulada (personas definidas en `prd.md`).
+- **Usuarios previstos:** analistas de crédito, risk managers y auditores/reguladores de una fintech simulada (personas definidas en `docs/informe-final.md`).
 - **Fuera de alcance:** el modelo no está validado para producción real, no procesa datos personales reales, y no reemplaza la supervisión humana en la decisión final de crédito.
 
 ## 3. Datos de entrenamiento

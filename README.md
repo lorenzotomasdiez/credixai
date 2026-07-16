@@ -58,7 +58,6 @@ El estilo elegido es service-based, justificado en `docs/architecture-style-sele
 | `docs/model-card.md` | Performance, fairness, limitaciones y uso previsto del modelo |
 | `docs/adr/` | Decisiones de arquitectura (ADRs) |
 | `docs/architecture-characteristics.md`, `docs/architecture-style-selection.md` | Trade-offs de diseño |
-| `prd.md` | Producto y alcance completo del proyecto |
 
 ## Estructura del repo
 
@@ -74,6 +73,23 @@ tests/          # tests automatizados
 ```
 
 ## Setup
+
+Camino rápido, de punta a punta (dependencias, dataset de Kaggle, pipeline completo hasta el modelo entrenado, e ingesta del RAG normativo):
+
+```
+make setup
+```
+
+Requiere antes: credenciales de la API de Kaggle (ver `scripts/00_download_data.py`) y un `.env` con `OPENROUTER_API_KEY` (ver `.env.example`).
+
+Para levantar todo el stack containerizado (API, dashboard, Qdrant y Langfuse self-hosteado):
+
+```
+make up    # levanta todo
+make down  # lo baja
+```
+
+Si preferís correr los pasos a mano en vez de `make setup` (por ejemplo para debuggear un paso puntual), o solo instalar dependencias sin tocar datos:
 
 ```
 uv sync
@@ -177,7 +193,7 @@ curl -X POST http://localhost:8000/copilot/memo/100002
 
 Todas las llamadas a LLM del proyecto (RAG y copiloto) pasan por `OpenRouterClient`, que es el unico punto donde se instrumentan como generations de Langfuse.
 `/rag/query` y `/copilot/memo/{sk_id_curr}` abren ademas un span raiz por request, asi que las generations anidadas quedan agrupadas en una sola traza sin pasar un objeto trace a mano por el pipeline o el grafo.
-Cada corrida del copiloto queda scoreada con `evaluator_passed_first_try` (si aprobo sin necesitar el reintento del evaluator-optimizer), que operacionaliza la metrica de agente de prd.md 8.3.
+Cada corrida del copiloto queda scoreada con `evaluator_passed_first_try` (si aprobo sin necesitar el reintento del evaluator-optimizer), que operacionaliza la metrica de agente del proyecto.
 
 Self-hosteado via docker-compose (Postgres + ClickHouse + Redis + MinIO + Langfuse), usando el stack oficial que publica el propio proyecto Langfuse:
 
@@ -188,7 +204,7 @@ docker compose up -d postgres clickhouse redis minio langfuse-worker langfuse-we
 La UI queda en `http://localhost:3000`; el primer signup genera `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY`, que van al `.env` junto a `LANGFUSE_HOST=http://localhost:3000`.
 Sin esas claves, el SDK de Langfuse queda deshabilitado (no-op) y el resto del proyecto sigue funcionando igual, sin trazas.
 
-Validacion del juez LLM del evaluator-optimizer contra un golden set etiquetado a mano (TPR/TNR, umbral >= 0.90 segun prd.md 7.7), resultado y limitaciones documentados en `docs/informe-final.md` seccion 8.7:
+Validacion del juez LLM del evaluator-optimizer contra un golden set etiquetado a mano (TPR/TNR, segun el umbral de validacion del juez LLM >= 0.90), resultado y limitaciones documentados en `docs/informe-final.md` seccion 8.7:
 
 ```
 uv run python scripts/08_langfuse_judge_validation.py
@@ -211,9 +227,10 @@ Resultado real (sin perturbación sintética), documentado en `docs/informe-fina
 ## Datos
 
 Los datos (`data/raw`, `data/processed`) se versionan con DVC, no con git; el repo solo trackea `data/raw.dvc` y `data/processed.dvc` (metadatos con hash).
-Por ahora el cache de DVC es local (sin remote configurado): quien clone el repo necesita colocar el dataset original de Kaggle en `data/raw/` y correr `dvc add data/raw data/processed` para que los hashes coincidan, o `dvc checkout` si ya tiene acceso al mismo cache local.
+`make setup` descarga `data/raw` desde Kaggle (`scripts/00_download_data.py`, idempotente) y genera `data/processed` corriendo el pipeline (Tareas 2 y 3), versionando ambos con DVC en el proceso.
+Por ahora el cache de DVC es local (sin remote configurado): quien ya tenga acceso al mismo cache local puede usar `dvc checkout` en vez de descargar de nuevo.
 
 ```
 dvc status   # ver si data/raw o data/processed cambiaron respecto al .dvc trackeado
-dvc add data/raw data/processed   # re-trackear después de un cambio
+dvc add data/raw data/processed   # re-trackear después de un cambio manual
 ```

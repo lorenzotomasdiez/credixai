@@ -1,4 +1,4 @@
-"""Tests para credixai.copilot.generation.draft_memo (paso 6, prd.md 9.1).
+"""Tests para credixai.copilot.generation.draft_memo (paso 6).
 
 TDD: draft_memo redacta el memo en base a los reason_codes y citas ya
 calculados por las tools, sin inventar razones nuevas; se testea con un

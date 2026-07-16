@@ -1,4 +1,4 @@
-"""Tests para credixai.rag.sparse_index (paso 5, prd.md 9.1).
+"""Tests para credixai.rag.sparse_index (paso 5).
 
 TDD: se escribe antes que credixai/rag/sparse_index.py. BM25 corre
 localmente (rank_bm25), sin red, por eso vive en la suite rapida.

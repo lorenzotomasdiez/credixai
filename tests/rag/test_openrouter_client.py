@@ -1,4 +1,4 @@
-"""Tests para credixai.rag.openrouter_client (paso 5, prd.md 9.1).
+"""Tests para credixai.rag.openrouter_client (paso 5).
 
 TDD: se escribe antes que credixai/rag/openrouter_client.py.
 La validacion de configuracion (falta de API key) es un limite del sistema

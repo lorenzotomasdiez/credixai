@@ -1,6 +1,6 @@
 # Architecture Characteristics — CrediXAI
 
-**Fuente de requisitos:** `prd.md` (secciones 3, 6, 8, 10).
+**Fuente de requisitos:** `docs/informe-final.md`.
 **Estado:** Borrador para discusión.
 
 ---

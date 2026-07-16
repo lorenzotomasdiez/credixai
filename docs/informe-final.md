@@ -1,6 +1,16 @@
 # Informe final - CrediXAI
 
-**Propósito:** registro acumulativo de hallazgos durante el desarrollo, insumo directo para el informe ejecutivo (Tarea 6) y la documentación técnica (Tarea 7).
+**Propósito:** documento técnico único y autocontenido del proyecto: registra de punta a punta el desarrollo de las 7 tareas académicas y las extensiones de portfolio, con el detalle metodológico completo (hipótesis, resultado, implicancia) de cada paso.
+Es la fuente primaria de la que se derivan `docs/informe-ejecutivo.md` (resumen no técnico) y `docs/model-card.md` (ficha de modelo); la sección 9 (Conclusiones) cierra con el estado final de cumplimiento y la matriz de trazabilidad de requerimientos.
+
+## Resumen
+
+CrediXAI es un sistema de scoring crediticio para una fintech argentina simulada, construido sobre el dataset público Home Credit Default Risk (Kaggle).
+Predice la probabilidad de default con XGBoost (ROC-AUC 0.7815 en holdout, 0.7802 ± 0.0032 en validación cruzada de 5 folds), explica cada decisión con SHAP local y reason codes compatibles con notificación de acción adversa, y segmenta la cartera en 5 perfiles de riesgo mediante clustering no supervisado.
+Sobre ese núcleo se construyeron tres capas de portfolio: una capa RAG que responde consultas de normativa BCRA/Basilea citando la fuente, un copiloto agéntico (LangGraph, patrón orchestrator-workers) que redacta memos crediticios, y una capa MLOps/LLMOps completa (MLflow, Evidently, Langfuse, FastAPI, Docker, CI/CD).
+El hallazgo más relevante del proyecto no es de performance sino de auditoría: el modelo amplifica al doble la disparidad real de default por género y edad respecto de la observada en los datos crudos (sección 5.4), evidencia cuantitativa de que la explicabilidad no es un accesorio sino una necesidad de gobernanza.
+El documento también registra con la misma honestidad los objetivos no alcanzados: el ROC-AUC quedó una décima por debajo del target (0.79), los contrafácticos con DiCE resultaron incompatibles con el manejo nativo de NaN de XGBoost (sección 5.5), y la evaluación RAGAS no llega de forma estable al umbral de *answer relevancy* (sección 8.5).
+La sección 9 cierra con la matriz de trazabilidad completa contra los requerimientos funcionales y no funcionales del proyecto.
 
 ---
 
@@ -509,14 +519,15 @@ Todos los números citados en la model card son una referencia directa a valores
 
 ### 7.3 README
 
-Se reescribió `README.md` a un formato de nivel producción: un hook de una frase basado en el hallazgo de fairness (la amplificación de disparidad, no un resumen genérico del proyecto), tres resultados técnicos cuantificados en la portada, un diagrama de arquitectura (Mermaid) que distingue explícitamente qué está implementado (núcleo académico: Data & Feature Store, ML Scoring, XAI, Segmentación, Serving vía Streamlit) de qué es una extensión de portfolio no implementada todavía (API REST, RAG normativo, copiloto agéntico), una tabla de navegación a toda la documentación del repo, y los comandos exactos para reproducir el pipeline completo y levantar el dashboard.
-Se optó deliberadamente por no incluir un GIF de demo, que requeriría grabar y editar video, fuera del alcance de esta sesión de trabajo; queda señalado como pendiente de portfolio, no se simuló ni se dejó un placeholder engañoso.
+Se reescribió `README.md` a un formato de nivel producción: un hook de una frase basado en el hallazgo de fairness (la amplificación de disparidad, no un resumen genérico del proyecto), tres resultados técnicos cuantificados en la portada, un diagrama de arquitectura (Mermaid) que en su primera versión distinguía el núcleo académico (Data & Feature Store, ML Scoring, XAI, Segmentación, Serving vía Streamlit) de las extensiones de portfolio, entonces no implementadas (API REST, RAG normativo, copiloto agéntico), una tabla de navegación a toda la documentación del repo, y los comandos exactos para reproducir el pipeline completo y levantar el dashboard.
+Se optó deliberadamente por no incluir un GIF de demo, que requeriría grabar y editar video; queda señalado como pendiente de portfolio, no se simuló ni se dejó un placeholder engañoso.
+Nota de mantenimiento: esta subsección documenta la reescritura tal como se hizo al cerrar el núcleo académico (Tarea 7); las extensiones que en ese momento el diagrama marcaba como pendientes se completaron después y están documentadas en la sección 8, con el README ya actualizado para reflejarlas.
 
 ### 7.4 API docs (FastAPI/OpenAPI)
 
 La documentación de API vía FastAPI/OpenAPI se definió desde el inicio del proyecto como una extensión de portfolio, no como parte del núcleo académico obligatorio.
-No se implementó en esta sesión: el sistema expone sus resultados únicamente a través del dashboard Streamlit de la Tarea 6, no de una API REST.
-Queda como trabajo futuro, junto con el RAG normativo y el copiloto agéntico, consistente con el principio de gestión de scope adoptado para priorizar primero el núcleo académico completo.
+Al cierre de la Tarea 7 no estaba implementada: el sistema exponía sus resultados únicamente a través del dashboard Streamlit de la Tarea 6.
+Se implementó después, como paso 2 de las extensiones de portfolio (sección 8.2): `app/api.py` expone `/score`, `/explain`, `/rag/query` y `/copilot/memo/{sk_id_curr}` con esquemas Pydantic y documentación OpenAPI automática en `/docs`.
 
 ---
 
@@ -773,3 +784,79 @@ Como el CLI de Streamlit importa pandas como parte de su propio arranque, antes 
 Se creó `app/dashboard_launcher.py`, un lanzador que fuerza el thread pool de PyArrow a 1 antes de importar Streamlit, y se actualizaron el comando documentado (`README.md`, `docs/guia-de-usuario.md`) y `Dockerfile.dashboard` para usarlo en vez de `streamlit run app/dashboard.py` directo.
 Verificado estable con `AppTest`: 5 re-renders consecutivos y el flujo completo de las pestañas nuevas contra la API real, sin crash; verificado también que la imagen Docker reconstruida con el nuevo lanzador levanta sana.
 Este hallazgo es otro caso, como el bug de `tool_calls` del paso 6, de un defecto que ninguna suite de tests con datos sintéticos hubiera atrapado: el dashboard nunca tuvo tests automatizados (requiere runtime completo, documentado desde la Tarea 6), así que un bug preexistente de dos re-renders quedó sin detectar hasta que este paso agregó una razón real para interactuar con el dashboard más de una vez seguida.
+
+### 8.10 Reproducibilidad: `Makefile`
+
+Décimo paso, agregado al cerrar la revisión de punta a punta del proyecto: hasta este punto, levantar el sistema completo requería conocer y ordenar manualmente más de diez comandos (`uv sync`, descarga de datos, cuatro scripts de pipeline, `dvc add`, `docker compose up` de varios servicios, ingesta del RAG).
+Se agregó `scripts/00_download_data.py` (descarga el dataset de Home Credit vía la API de Kaggle a `data/raw/`, idempotente: si los 8 CSV ya están, no vuelve a descargar) y un `Makefile` con tres targets: `make setup` (dependencias, dataset, pipeline completo de features/clustering/modelado/explicabilidad, versionado DVC e ingesta del RAG normativo), `make up` (levanta todo el stack containerizado: API, dashboard, Qdrant y Langfuse self-hosteado, en un solo comando) y `make down`.
+Requiere que quien clone el repo provea de antemano las dos credenciales que no se pueden commitear ni generar automáticamente: token de la API de Kaggle (`~/.kaggle/kaggle.json`, tras aceptar las reglas de la competencia) y `OPENROUTER_API_KEY` en `.env`.
+Documentado en `README.md`, sección Setup.
+
+---
+
+## 9. Conclusiones
+
+### 9.1 Cumplimiento del plan de trabajo
+
+Las 7 tareas académicas (EDA, feature engineering, clustering, modelado supervisado, explicabilidad, visualización/informe ejecutivo, documentación técnica) están completas y evidenciadas en las secciones 1-7 de este informe.
+Las tres capas de extensión de portfolio identificadas en el diseño original (RAG, agentes, MLOps/LLMOps) están completas, junto con dos pasos que surgieron durante la ejecución y no estaban en el alcance original: reproducibilidad end-to-end (`Makefile`, sección 8.10) y UI de RAG/copiloto en el dashboard (sección 8.9).
+Los 9+1 pasos de extensión están documentados en la sección 8, en el orden real de dependencia técnica con el que se ejecutaron, no en el orden cronológico en que se habían anticipado.
+
+### 9.2 Métricas finales vs. objetivos
+
+| Métrica | Target | Resultado | Cumplido |
+|---|---|---|---|
+| ROC-AUC (holdout) | ≥ 0.79 | 0.7815 | Parcial — CV 0.7802 ± 0.0032, la media queda por debajo del target (§4.5) |
+| Brier score (calibración) | ≤ 0.15 | 0.0660 | Sí |
+| Estabilidad SHAP (Kendall τ) | ≥ 0.90 | 0.9917 ± 0.0010 | Sí (§5.1) |
+| Fairness — género (statistical parity diff) | [-0.1, 0.1] | 0.0608 | Sí, pero ver disparate impact y EOD abajo (§5.4) |
+| Fairness — género (disparate impact) | ≥ 0.80 (regla del 80%) | 0.496 | No |
+| Fairness — género (equal opportunity diff) | [-0.1, 0.1] | 0.1315 | No |
+| Fairness — edad (las tres métricas) | dentro de rango / ≥ 0.80 | 0.1282 / 0.134 / 0.3257 | No, en las tres (§5.4) |
+| RAGAS faithfulness | ≥ 0.90 | 0.79-0.93 según corrida | Parcial — 2 de 4 corridas (§8.5) |
+| RAGAS answer relevancy | ≥ 0.85 | 0.70-0.81 según corrida | No, en ninguna corrida (§8.5) |
+
+El resultado de fairness es, deliberadamente, el hallazgo central del proyecto (§5.4): el sistema no se diseñó para maquillar la disparidad sino para medirla y exponerla, y el "No" en la tabla de arriba es la evidencia que sostiene esa exposición, no un fracaso a ocultar.
+
+### 9.3 Matriz de trazabilidad de requerimientos
+
+Requerimientos funcionales (RF) y no funcionales (RNF) del sistema, con su estado de cumplimiento final y la sección donde se verifica.
+
+| Código | Requerimiento | Estado | Sección |
+|---|---|---|---|
+| RF-1 | Predice P(default) calibrada y decisión por umbral configurable | Cumplido | §4.4, §4.5 |
+| RF-2 | Explicación local SHAP (top-N por solicitud) | Cumplido | §5.2 |
+| RF-3 | Al menos una explicación contrafáctica accionable | No cumplido en producción | §5.5 — DiCE incompatible con el manejo nativo de NaN de XGBoost; queda solo como prueba de concepto en notebook |
+| RF-4 | Reason codes de adverse action (≤4, atributos protegidos excluidos) | Cumplido | §5.3 |
+| RF-5 | El RAG responde citando documento + fragmento | Cumplido | §8.5 |
+| RF-6 | El copiloto investiga una solicitud y redacta un memo | Cumplido | §8.6 |
+| RF-7 | Dashboard con segmentación, métricas, fairness y detalle por solicitud | Cumplido | §6.1, §8.9 |
+| RF-8 | API REST para scoring y explicación | Cumplido | §8.2 |
+| RNF-1 | Explicabilidad local y trazable a política | Cumplido | §5.1-5.3, §8.5 |
+| RNF-2 | Fairness medida y documentada (statistical parity, equal opportunity, disparate impact) | Medido y documentado; el modelo no está dentro del rango de referencia | §5.4 |
+| RNF-3 | Reproducibilidad (código versionado, seeds, datos versionados, containerizado) | Cumplido | §2.14, §8.3, §8.10 |
+| RNF-4 | Observabilidad (trazas LLM, logs de predicción, drift) | Cumplido | §8.7, §8.8 |
+| RNF-5 | Latencia scoring + SHAP < 2 s por solicitud | No medido formalmente | — sin benchmark dedicado en ninguna sección |
+| RNF-6 | Costo de APIs LLM en el rango de decenas de dólares | No trackeado con un número acumulado | — arquitectura (OpenRouter, `gpt-4o-mini`, sin fine-tuning) diseñada para ese rango, sin medición de gasto real |
+| RNF-7 | Guardrails contra prompt injection y validación de outputs con Pydantic | Parcial | Pydantic cubre los esquemas de la API (§8.2); las respuestas JSON del LLM (memo, juez evaluator-optimizer) se parsean sin un esquema Pydantic propio, y no hay guardrail explícito de prompt injection |
+| RNF-8 | RAGAS faithfulness ≥ 0.90 y answer relevancy ≥ 0.85 | No cumplido de forma estable | §8.5 |
+
+De 16 requerimientos, 10 están cumplidos, 1 medido y documentado sin estar dentro del rango buscado (RNF-2, el hallazgo central), 3 no cumplidos con causa raíz identificada (RF-3, RNF-8, y parcialmente RNF-7), y 2 no verificados por no haberse instrumentado una medición dedicada (RNF-5, RNF-6).
+
+### 9.4 Limitaciones conocidas (consolidado)
+
+- **Fairness:** el modelo amplifica al doble la disparidad real de default por género y edad; sin mitigación aplicada, documentada como línea de trabajo futuro (§5.4).
+- **Contrafácticos:** DiCE requiere filas sin NaN; XGBoost usa el NaN nativo como señal; ambas cosas son incompatibles justo para los solicitantes con historial incompleto, los que más necesitarían un contrafáctico accionable (§5.5).
+- **RAGAS answer relevancy:** no llega al umbral de forma estable; la inspección manual no encontró alucinaciones, la brecha es en gran parte ruido de la métrica sobre preguntas de definición/sigla, no calidad real de respuesta (§8.5).
+- **Latencia y costo (RNF-5, RNF-6):** no instrumentados con una medición dedicada; quedan como trabajo futuro antes de cualquier consideración de uso productivo.
+- **Validación de outputs del LLM (RNF-7):** el memo del copiloto y el veredicto del evaluator-optimizer se parsean como JSON libre, no contra un esquema Pydantic; no hay guardrail explícito de prompt injection probado.
+- **DVC sin remote:** el cache es local; quien clone el repo necesita `make setup` (descarga desde Kaggle) o acceso al mismo cache local, no hay almacenamiento compartido configurado.
+
+### 9.5 Trabajo futuro
+
+1. Cerrar la brecha de ROC-AUC (0.7802 real vs. 0.79 target) con feature engineering adicional o ensembles, ya que el tuneo manual de hiperparámetros no lo logró (§4.5).
+2. Mitigación de fairness: `ThresholdOptimizer` (Fairlearn) con restricción de equidad, o remover/neutralizar `CODE_GENDER` y proxies de edad antes de reentrenar, midiendo si la amplificación persiste por otras variables proxy (§5.4).
+3. Contrafácticos sobre un método que no requiera imputar filas completas, o acotado al subconjunto de features siempre completas (§5.5).
+4. Instrumentar RNF-5 (latencia) y RNF-6 (costo acumulado de API) con mediciones reales antes de cualquier escenario de uso productivo.
+5. Migrar el parseo de outputs del LLM (memo, juez) a esquemas Pydantic explícitos, y agregar un test de guardrail contra prompt injection sobre el pipeline RAG y el copiloto.
+6. Writeup técnico de portfolio sobre las decisiones de arquitectura más discutibles del proyecto (RAG vs. fine-tuning, LangGraph vs. CrewAI, el trade-off performance/explicabilidad).

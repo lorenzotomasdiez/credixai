@@ -37,7 +37,7 @@ def feature_columns(features: pd.DataFrame) -> list:
 
 
 def evaluate(y_true, y_proba, label: str = "") -> dict:
-    """ROC-AUC, PR-AUC, KS y Brier score, las 4 metricas de prd.md S8.1."""
+    """ROC-AUC, PR-AUC, KS y Brier score, las 4 metricas de evaluacion."""
     auc = roc_auc_score(y_true, y_proba)
     pr_auc = average_precision_score(y_true, y_proba)
     brier = brier_score_loss(y_true, y_proba)

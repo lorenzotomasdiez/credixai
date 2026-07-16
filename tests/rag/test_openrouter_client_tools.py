@@ -1,4 +1,4 @@
-"""Tests para OpenRouterClient.chat_with_tools (paso 6, prd.md 9.1).
+"""Tests para OpenRouterClient.chat_with_tools (paso 6).
 
 TDD: chat_with_tools es lo que necesita el orchestrator del copiloto para
 tool-calling real. Se testea sin red, monkeypatcheando el cliente OpenAI

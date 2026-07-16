@@ -1,4 +1,4 @@
-"""Grafo LangGraph del copiloto agentico (RF-6, paso 6, prd.md 9.1).
+"""Grafo LangGraph del copiloto agentico (RF-6, paso 6).
 
 Orchestrator-workers (Anthropic, "Building Effective Agents"): un LLM con
 tool-calling real decide dinamicamente que tools invocar

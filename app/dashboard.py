@@ -1,8 +1,8 @@
-"""Tarea 6 (prd.md S5): dashboard de visualizacion e informe ejecutivo para
+"""Tarea 6: dashboard de visualizacion e informe ejecutivo para
 CrediXAI. Cubre RF-7 (segmentacion, metricas globales, fairness y detalle
 por solicitud) sobre el modelo XGBoost final de la Tarea 4, la segmentacion
 de la Tarea 3 y la explicabilidad/fairness de la Tarea 5. Las pestanias
-"Consulta normativa" y "Copiloto" (paso 9, prd.md 9.1) consumen /rag/query y
+"Consulta normativa" y "Copiloto" (paso 9) consumen /rag/query y
 /copilot/memo/{sk_id_curr} por HTTP contra la API (credixai.dashboard_client),
 en vez de importar credixai.rag/credixai.copilot directo, para no duplicar
 el setup de Qdrant/OpenRouter/LangGraph dentro de Streamlit.

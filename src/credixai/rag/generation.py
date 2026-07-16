@@ -1,4 +1,4 @@
-"""Generacion de respuestas grounded con citas (RF-5, paso 5, prd.md 9.1).
+"""Generacion de respuestas grounded con citas (RF-5, paso 5).
 
 PolicyAnswerer arma un prompt grounded (RNF-1: toda explicacion trazable a
 politica) a partir de los chunks recuperados, y deriva las citas (RF-5:

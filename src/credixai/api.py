@@ -1,4 +1,4 @@
-"""Serving (paso 2 de prd.md 9.1): logica reutilizable detras de app/api.py.
+"""Serving (paso 2): logica reutilizable detras de app/api.py.
 
 ScoringService envuelve un bundle ya entrenado (el mismo que produce
 credixai.dashboard.train_full_model) y responde consultas de score/explain

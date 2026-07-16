@@ -1,4 +1,4 @@
-"""Tests para credixai.monitoring.drift (paso 8, prd.md 9.1).
+"""Tests para credixai.monitoring.drift (paso 8).
 
 TDD: se escribe antes que credixai/monitoring/drift.py.
 alert_columns es pura: separa la logica de "que columnas superan el umbral

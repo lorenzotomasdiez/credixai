@@ -1,4 +1,4 @@
-"""Paso 5 (prd.md 9.1): evaluacion RAGAS del RAG normativo (RNF-8).
+"""Paso 5: evaluacion RAGAS del RAG normativo (RNF-8).
 
 Corre el pipeline real (retrieval + generacion) sobre un set de preguntas
 escritas a mano, ancladas en el corpus (docs/policy_corpus), y mide con

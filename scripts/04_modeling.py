@@ -1,4 +1,4 @@
-"""Tarea 4 (prd.md S5): entrena el baseline (LogReg) y el modelo primario
+"""Tarea 4: entrena el baseline (LogReg) y el modelo primario
 (XGBoost) de default sobre data/processed/features.parquet, registra ambos
 en MLflow y persiste el modelo final para servir en tareas posteriores.
 

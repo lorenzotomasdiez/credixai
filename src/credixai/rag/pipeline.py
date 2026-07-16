@@ -1,4 +1,4 @@
-"""Fachada que junta PolicyRetriever + PolicyAnswerer (paso 5, prd.md 9.1).
+"""Fachada que junta PolicyRetriever + PolicyAnswerer (paso 5).
 
 Punto unico que app/api.py necesita conocer para RF-5, igual que
 ScoringService es el unico punto que conoce para /score y /explain.

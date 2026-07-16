@@ -1,4 +1,4 @@
-"""Tests para los root spans Langfuse en /rag/query y /copilot/memo (paso 7, prd.md 9.1).
+"""Tests para los root spans Langfuse en /rag/query y /copilot/memo (paso 7).
 
 TDD: se escribe antes de tocar app/api.py. Los endpoints envuelven su
 trabajo en un span raiz de Langfuse (get_langfuse_client, inyectable via

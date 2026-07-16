@@ -1,8 +1,8 @@
-"""Tools del copiloto agentico (RF-6, paso 6, prd.md 9.1).
+"""Tools del copiloto agentico (RF-6, paso 6).
 
 Cada tool llama al endpoint REST correspondiente (/score, /explain,
 /rag/query) via httpx en vez de importar ScoringService/RagPipeline
-directamente (prd.md linea 254: tools expuestas como endpoints FastAPI).
+directamente (decision de diseno: tools expuestas como endpoints FastAPI, no imports directos).
 Son async porque httpx.ASGITransport (llamar la propia app FastAPI sin un
 segundo proceso escuchando en red real) solo soporta clientes async; el
 grafo LangGraph que las invoca tambien es async de punta a punta.

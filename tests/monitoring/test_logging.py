@@ -1,4 +1,4 @@
-"""Tests para credixai.monitoring.logging (paso 8, prd.md 9.1).
+"""Tests para credixai.monitoring.logging (paso 8).
 
 TDD: se escribe antes que credixai/monitoring/logging.py.
 format_log_entry es pura (recibe el timestamp en vez de generarlo) para

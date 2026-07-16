@@ -1,4 +1,4 @@
-"""Cliente HTTP del dashboard hacia la API (paso 9, prd.md 9.1: UI de RAG/copiloto).
+"""Cliente HTTP del dashboard hacia la API (paso 9, UI de RAG/copiloto).
 
 El dashboard consume /rag/query y /copilot/memo/{sk_id_curr} por HTTP en vez
 de importar credixai.rag/credixai.copilot directo, mismo principio ya usado

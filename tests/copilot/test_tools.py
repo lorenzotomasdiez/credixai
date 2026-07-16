@@ -1,8 +1,8 @@
-"""Tests para credixai.copilot.tools (paso 6, prd.md 9.1).
+"""Tests para credixai.copilot.tools (paso 6).
 
 TDD: las tools del copiloto llaman a los endpoints REST ya existentes
 (/score, /explain, /rag/query) via httpx contra una app ASGI, nunca
-importando ScoringService/RagPipeline directamente (prd.md linea 254).
+importando ScoringService/RagPipeline directamente (tools como endpoints REST, no imports directos).
 Se testea contra una app FastAPI de juguete, sin cargar el modelo real.
 Son async (httpx.ASGITransport solo soporta clientes async); se manejan
 con asyncio.run en vez de sumar pytest-asyncio como dependencia nueva.

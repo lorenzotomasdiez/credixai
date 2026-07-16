@@ -1,4 +1,4 @@
-"""Tests para credixai.rag.pipeline (paso 5, prd.md 9.1)."""
+"""Tests para credixai.rag.pipeline (paso 5)."""
 
 from credixai.rag.generation import AnswerResult
 from credixai.rag.pipeline import RagPipeline

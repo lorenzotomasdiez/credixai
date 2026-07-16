@@ -1,4 +1,4 @@
-"""Tests HTTP para app/api.py (paso 2, prd.md 9.1).
+"""Tests HTTP para app/api.py (paso 2).
 
 TDD: este archivo se escribe antes que app/api.py. Usa TestClient con un
 ScoringService sintetico inyectado via dependency override, para no

@@ -1,4 +1,4 @@
-"""Indice BM25 (busqueda por keywords) sobre los chunks del corpus (paso 5, prd.md 9.1)."""
+"""Indice BM25 (busqueda por keywords) sobre los chunks del corpus (paso 5)."""
 
 import re
 

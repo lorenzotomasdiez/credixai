@@ -1,4 +1,4 @@
-"""Tests para credixai.observability.metrics (paso 7, prd.md 9.1).
+"""Tests para credixai.observability.metrics (paso 7).
 
 TDD: se escribe antes que credixai/observability/metrics.py.
 Funciones puras (sin red, sin Langfuse real) que traducen resultados del

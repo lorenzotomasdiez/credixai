@@ -1,4 +1,4 @@
-"""Tarea 2 (prd.md S5): construye la tabla de features de Home Credit Default Risk
+"""Tarea 2: construye la tabla de features de Home Credit Default Risk
 y la persiste en data/processed/features.parquet.
 
 Uso:

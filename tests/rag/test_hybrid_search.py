@@ -1,4 +1,4 @@
-"""Tests para credixai.rag.hybrid_search (paso 5, prd.md 9.1).
+"""Tests para credixai.rag.hybrid_search (paso 5).
 
 TDD: se escribe antes que credixai/rag/hybrid_search.py. Reciprocal Rank
 Fusion es logica pura sobre listas de ids rankeados, sin embeddings ni

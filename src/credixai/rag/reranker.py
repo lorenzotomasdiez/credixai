@@ -1,4 +1,4 @@
-"""Reranking listwise via LLM (paso 5, prd.md 9.1).
+"""Reranking listwise via LLM (paso 5).
 
 Se usa un reranker basado en LLM (via OpenRouter, mismo provider que
 embeddings y generacion) en vez de un cross-encoder local, para no sumar una

@@ -1,4 +1,4 @@
-"""Tests para credixai.rag.retrieval (paso 5, prd.md 9.1).
+"""Tests para credixai.rag.retrieval (paso 5).
 
 TDD: se escribe antes que credixai/rag/retrieval.py. PolicyRetriever orquesta
 embed + busqueda densa + BM25 + RRF + rerank; todas sus dependencias se

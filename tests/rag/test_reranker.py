@@ -1,4 +1,4 @@
-"""Tests para credixai.rag.reranker (paso 5, prd.md 9.1).
+"""Tests para credixai.rag.reranker (paso 5).
 
 TDD: se escribe antes que credixai/rag/reranker.py. LLMReranker recibe
 chat_fn inyectado (mismo patron que ScoringService recibe un bundle ya

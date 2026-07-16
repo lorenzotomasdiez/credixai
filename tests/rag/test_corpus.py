@@ -1,4 +1,4 @@
-"""Tests para credixai.rag.corpus (paso 5, prd.md 9.1).
+"""Tests para credixai.rag.corpus (paso 5).
 
 TDD: se escribe antes que credixai/rag/corpus.py. Usa un directorio temporal
 con markdown sintetico, no el corpus real de docs/policy_corpus, para no

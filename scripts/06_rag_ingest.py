@@ -1,4 +1,4 @@
-"""Paso 5 (prd.md 9.1): ingesta del corpus normativo al RAG.
+"""Paso 5: ingesta del corpus normativo al RAG.
 
 Carga docs/policy_corpus, chunkea cada documento, embebe los chunks via
 OpenRouter y los sube a Qdrant. Ademas persiste los chunks (texto +

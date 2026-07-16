@@ -1,4 +1,4 @@
-"""Tests HTTP para /rag/query en app/api.py (paso 5, prd.md 9.1).
+"""Tests HTTP para /rag/query en app/api.py (paso 5).
 
 TDD: se escribe antes de tocar app/api.py. Igual que test_api_http.py, usa
 TestClient con dependencias inyectadas via dependency override, sin llamar a

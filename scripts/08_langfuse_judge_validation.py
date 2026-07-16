@@ -1,10 +1,10 @@
-"""Paso 7 (prd.md 9.1): validacion del juez LLM del copiloto contra un golden set etiquetado a mano.
+"""Paso 7: validacion del juez LLM del copiloto contra un golden set etiquetado a mano.
 
 El juez LLM (credixai.copilot.evaluator.llm_judge) decide si un memo
 redactado por el copiloto solo afirma cosas soportadas por su contexto. Este
 script lo corre contra GOLDEN_SET, un conjunto chico de casos memo+contexto
 con un veredicto humano de referencia, e informa TPR/TNR (umbral >= 0.90
-segun prd.md 7.7). Cada caso queda registrado como dataset item en Langfuse
+del juez LLM). Cada caso queda registrado como dataset item en Langfuse
 y cada corrida como trace con un score judge_correct, para poder auditar
 despues cuales casos fallan.
 
@@ -166,7 +166,7 @@ def _run_validation() -> None:
     tpr = tp / (tp + fn) if (tp + fn) else float("nan")
     tnr = tn / (tn + fp) if (tn + fp) else float("nan")
 
-    print("\n=== Validacion del juez LLM (prd.md 7.7) ===")
+    print("\n=== Validacion del juez LLM ===")
     print(f"TP={tp} TN={tn} FP={fp} FN={fn}")
     print(f"TPR (sensibilidad, detecta memos buenos): {tpr:.4f} (umbral >= {TPR_THRESHOLD})")
     print(f"TNR (especificidad, detecta memos malos): {tnr:.4f} (umbral >= {TNR_THRESHOLD})")

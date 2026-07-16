@@ -1,4 +1,4 @@
-"""Tests para la instrumentacion Langfuse de OpenRouterClient (paso 7, prd.md 9.1).
+"""Tests para la instrumentacion Langfuse de OpenRouterClient (paso 7).
 
 TDD: OpenRouterClient es el unico choke point por el que pasan todas las
 llamadas a LLM del proyecto (RAG y copiloto), asi que se instrumenta una

@@ -1,4 +1,4 @@
-"""Tarea 3 (prd.md S5): segmenta a los solicitantes en perfiles de riesgo
+"""Tarea 3: segmenta a los solicitantes en perfiles de riesgo
 mediante K-Means y persiste los segmentos en data/processed/segments.parquet.
 
 Requiere haber corrido antes scripts/02_features.py.

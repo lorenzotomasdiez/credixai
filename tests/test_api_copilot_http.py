@@ -1,4 +1,4 @@
-"""Tests HTTP para /copilot/memo/{sk_id_curr} en app/api.py (paso 6, prd.md 9.1).
+"""Tests HTTP para /copilot/memo/{sk_id_curr} en app/api.py (paso 6).
 
 TDD: se escribe antes de tocar app/api.py. Mismo patron que
 test_api_rag_http.py: TestClient con el grafo LangGraph inyectado via

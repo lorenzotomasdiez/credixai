@@ -1,4 +1,4 @@
-"""Evaluator del loop evaluator-optimizer (RF-6, paso 6, prd.md 9.1).
+"""Evaluator del loop evaluator-optimizer (RF-6, paso 6).
 
 run_precheck es una capa determinista, sin LLM, que corre antes del juez LLM:
 si algo aca falla no tiene sentido gastar una llamada de generacion para

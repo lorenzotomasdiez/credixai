@@ -1,4 +1,4 @@
-"""Verificacion real end-to-end del copiloto (paso 6, prd.md 9.1).
+"""Verificacion real end-to-end del copiloto (paso 6).
 
 Marcado integration: no corre en CI, requiere OPENROUTER_API_KEY real,
 Qdrant corriendo con el corpus ya ingestado (scripts/06_rag_ingest.py) y

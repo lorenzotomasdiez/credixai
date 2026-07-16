@@ -1,4 +1,4 @@
-"""Orquestador de retrieval hibrido + rerank (paso 5, prd.md 9.1).
+"""Orquestador de retrieval hibrido + rerank (paso 5).
 
 PolicyRetriever recibe todas sus dependencias inyectadas (embed_fn,
 vector_store, bm25_index, chunks_by_id, reranker), mismo patron que

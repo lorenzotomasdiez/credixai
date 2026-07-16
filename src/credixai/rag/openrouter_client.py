@@ -1,4 +1,4 @@
-"""Cliente delgado sobre OpenRouter (embeddings + chat), paso 5, prd.md 9.1.
+"""Cliente delgado sobre OpenRouter (embeddings + chat), paso 5.
 
 Un unico provider (OpenRouter) para embeddings, generacion grounded y
 reranking, elegido para no fragmentar la configuracion de LLM en el
@@ -6,7 +6,7 @@ proyecto. Modelos elegidos por costo/calidad (ver docs/informe-final.md
 seccion RAG): openai/text-embedding-3-small para embeddings, openai/gpt-4o-mini
 para chat/rerank.
 
-Choke point unico de observabilidad (paso 7, prd.md 9.1): todas las
+Choke point unico de observabilidad (paso 7): todas las
 llamadas a LLM del proyecto (RAG y copiloto) pasan por esta clase, asi que
 se instrumentan con Langfuse aca en vez de en cada call-site.
 """

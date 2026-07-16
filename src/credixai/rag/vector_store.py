@@ -1,4 +1,4 @@
-"""Wrapper delgado sobre QdrantClient para busqueda densa (paso 5, prd.md 9.1).
+"""Wrapper delgado sobre QdrantClient para busqueda densa (paso 5).
 
 El cliente se inyecta desde afuera: en tests apunta a Qdrant en modo
 ":memory:", en desarrollo/produccion apunta al servicio "qdrant" de

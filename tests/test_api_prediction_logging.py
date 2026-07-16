@@ -1,4 +1,4 @@
-"""Tests para el logging de predicciones de /score (RNF-4, paso 8, prd.md 9.1).
+"""Tests para el logging de predicciones de /score (RNF-4, paso 8).
 
 TDD: se escribe antes de tocar app/api.py. Mismo patron de DI que el resto
 de las dependencias del modulo: get_prediction_log_path se sobreescribe via

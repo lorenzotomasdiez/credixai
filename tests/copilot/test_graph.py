@@ -1,4 +1,4 @@
-"""Tests para credixai.copilot.graph (paso 6, prd.md 9.1).
+"""Tests para credixai.copilot.graph (paso 6).
 
 TDD: se testea el grafo LangGraph completo con tool_fns y chat_fns
 stubeados/scriptados (sin red, sin LangChain), cubriendo las tres ramas del

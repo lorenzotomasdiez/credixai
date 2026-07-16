@@ -1,4 +1,4 @@
-"""Chunking de documentos de politica para el corpus RAG (paso 5, prd.md 9.1).
+"""Chunking de documentos de politica para el corpus RAG (paso 5).
 
 Split por palabras con overlap, sin dependencias externas: los documentos del
 corpus son texto plano corto, y un tokenizador de subwords no aporta nada

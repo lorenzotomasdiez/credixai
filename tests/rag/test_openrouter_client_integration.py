@@ -1,4 +1,4 @@
-"""Verificacion real contra OpenRouter (paso 5, prd.md 9.1).
+"""Verificacion real contra OpenRouter (paso 5).
 
 Marcado integration: no corre en CI (ver ci.yml, `pytest -m "not integration"`)
 porque requiere OPENROUTER_API_KEY real y consume creditos, aunque minimos.

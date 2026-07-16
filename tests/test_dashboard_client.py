@@ -1,4 +1,4 @@
-"""Tests para credixai.dashboard_client (paso 9, prd.md 9.1: UI de RAG/copiloto).
+"""Tests para credixai.dashboard_client (paso 9, UI de RAG/copiloto).
 
 TDD: se escribe antes que credixai/dashboard_client.py. El dashboard llama
 a la API real por HTTP (mismo principio ya usado en credixai/copilot/tools.py

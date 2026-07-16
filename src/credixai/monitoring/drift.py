@@ -1,4 +1,4 @@
-"""Alerta de drift por PSI (RNF-4, paso 8, prd.md 9.1).
+"""Alerta de drift por PSI (RNF-4, paso 8).
 
 alert_columns es pura: el calculo de PSI en si lo hace Evidently
 (scripts/09_drift_report.py) contra los datos reales, y se verifica

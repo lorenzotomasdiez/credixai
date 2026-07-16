@@ -1,4 +1,4 @@
-"""Logs de prediccion (RNF-4, paso 8, prd.md 9.1).
+"""Logs de prediccion (RNF-4, paso 8).
 
 format_log_entry es pura (recibe el timestamp en vez de generarlo) para que
 el resto del pipeline (drift, tests) no dependa del reloj real.

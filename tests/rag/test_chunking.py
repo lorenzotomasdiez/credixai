@@ -1,4 +1,4 @@
-"""Tests para credixai.rag.chunking (paso 5, prd.md 9.1).
+"""Tests para credixai.rag.chunking (paso 5).
 
 TDD: este archivo se escribe antes que credixai/rag/chunking.py. Chunking es
 logica pura (split de texto), sin llamadas a red, por eso vive en la suite

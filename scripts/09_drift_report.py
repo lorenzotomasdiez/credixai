@@ -1,4 +1,4 @@
-"""Paso 8 (prd.md 9.1): monitoreo de drift (Evidently) sobre application_test vs application_train.
+"""Paso 8: monitoreo de drift (Evidently) sobre application_test vs application_train.
 
 Home Credit Default Risk es un dataset estatico de Kaggle, sin trafico
 productivo real a lo largo del tiempo. La poblacion "actual" mas honesta

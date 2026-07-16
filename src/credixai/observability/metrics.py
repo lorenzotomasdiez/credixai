@@ -1,4 +1,4 @@
-"""Metricas puras para observabilidad Langfuse (RNF-4, paso 7, prd.md 9.1).
+"""Metricas puras para observabilidad Langfuse (RNF-4, paso 7).
 
 Funciones sin efectos de red: traducen respuestas de OpenAI/OpenRouter y
 estado del copiloto a los datos que se adjuntan como usage/score en

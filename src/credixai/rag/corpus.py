@@ -1,4 +1,4 @@
-"""Carga del corpus de politicas (paso 5, prd.md 9.1).
+"""Carga del corpus de politicas (paso 5).
 
 Cada archivo markdown en el directorio de corpus es un documento: el nombre
 de archivo (sin extension) es el doc_id, y el primer encabezado `# ...` es

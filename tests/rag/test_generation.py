@@ -1,4 +1,4 @@
-"""Tests para credixai.rag.generation (paso 5, prd.md 9.1).
+"""Tests para credixai.rag.generation (paso 5).
 
 TDD: se escribe antes que credixai/rag/generation.py. PolicyAnswerer recibe
 chat_fn inyectado, igual que LLMReranker: el test stubea la respuesta del

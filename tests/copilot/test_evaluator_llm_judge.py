@@ -1,4 +1,4 @@
-"""Tests para credixai.copilot.evaluator.llm_judge (paso 6, prd.md 9.1).
+"""Tests para credixai.copilot.evaluator.llm_judge (paso 6).
 
 TDD: llm_judge es la segunda capa del evaluator (tras el precheck
 deterministico), un juez LLM que verifica que el memo no afirme nada no

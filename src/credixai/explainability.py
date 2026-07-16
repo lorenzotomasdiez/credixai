@@ -78,7 +78,7 @@ def reason_codes(shap_row: np.ndarray, feature_names, top_n: int = 4) -> list:
 
 def fairness_report(y_true, y_pred, sensitive_features) -> dict:
     """Statistical parity difference, disparate impact (ratio) y equal
-    opportunity difference (prd.md S8.4), dentro del rango de referencia
+    opportunity difference, dentro del rango de referencia
     [-0.1, 0.1] para las diferencias (convencion AIF360).
     """
     mf = MetricFrame(

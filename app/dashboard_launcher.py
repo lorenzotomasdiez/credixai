@@ -1,7 +1,7 @@
 """Lanza el dashboard de Streamlit (app/dashboard.py) forzando el thread pool
 interno de PyArrow a 1 hilo antes de que se importe pandas.
 
-Bug real encontrado y corregido (paso 9, prd.md 9.1): `streamlit run
+Bug real encontrado y corregido (paso 9): `streamlit run
 app/dashboard.py` directo segfaultea de forma reproducible a partir de la
 segunda vez que Streamlit re-ejecuta el script (cualquier interaccion con
 un widget dispara una re-ejecucion completa), en `st.dataframe()` o en un

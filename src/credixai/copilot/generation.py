@@ -1,4 +1,4 @@
-"""Redaccion del memo crediticio (RF-6, paso 6, prd.md 9.1).
+"""Redaccion del memo crediticio (RF-6, paso 6).
 
 draft_memo redacta el memo a partir de datos ya calculados por las tools
 (score, reason_codes, citas de politica): el LLM narra, no decide las

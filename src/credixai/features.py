@@ -33,7 +33,7 @@ def clean_days_employed(app: pd.DataFrame) -> pd.DataFrame:
 
 
 def add_business_ratios(app: pd.DataFrame) -> pd.DataFrame:
-    """Agrega credit-to-income, annuity-to-income y credit-to-goods (prd.md S7.2)."""
+    """Agrega credit-to-income, annuity-to-income y credit-to-goods."""
     app = app.copy()
     app["credit_to_income"] = app["AMT_CREDIT"] / app["AMT_INCOME_TOTAL"].replace(0, np.nan)
     app["annuity_to_income"] = app["AMT_ANNUITY"] / app["AMT_INCOME_TOTAL"].replace(0, np.nan)

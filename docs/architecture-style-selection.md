@@ -1,6 +1,6 @@
 # Architecture Style Selection — CrediXAI
 
-**Fuente de requisitos:** `docs/architecture-characteristics.md` (top 5), `prd.md` §7.1 (diagrama de componentes).
+**Fuente de requisitos:** `docs/architecture-characteristics.md` (top 5), `docs/informe-final.md` (arquitectura del sistema).
 **Estado:** Borrador para discusión.
 
 ---
