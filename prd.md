@@ -240,6 +240,21 @@ Ingesta de las 8 tablas de Home Credit Default Risk (~688 MB total): `applicatio
 
 *Principio de gestión de scope: el núcleo académico (tareas 1–7, fases F1–F4, F7, F8) es el MVP obligatorio para la nota. Las capas RAG (F5) y agentes (F6) son incrementales; si el tiempo aprieta, se entregan como "fase post-académica" sin comprometer la aprobación.*
 
+### 9.1 Orden de ejecución de las extensiones de portfolio (post núcleo académico)
+
+Con las tareas 1–7 cerradas (2026-07-16), las tres capas avanzadas de la sección 1 (RAG, agentes, MLOps/LLMOps) quedan por ejecutar.
+El roadmap original (tabla de arriba) las agrupa por fase calendario, pero no fija un orden de ejecución entre ellas para esta etapa post-académica.
+El orden que sigue está definido por dependencia técnica real entre componentes, no por el orden cronológico original:
+
+1. **Tests automatizados (pytest) sobre `src/credixai`.** Prerequisito de cualquier CI/CD real: sin tests, GitHub Actions solo podría lintear, no validar comportamiento. `tests/` existe en la estructura del repo pero está vacío.
+2. **FastAPI (serving).** Formaliza `/score` y `/explain` como API REST sobre las funciones ya existentes en `src/credixai` (`modeling`, `explainability`), que hoy solo consume el dashboard Streamlit por import directo. Es prerequisito de que el copiloto agéntico (paso 6) use el modelo y SHAP como tools HTTP reales, más representativo de un sistema productivo que importar funciones internas.
+3. **Docker.** Containeriza FastAPI + Streamlit; prerequisito de un build reproducible y del paso de CI/CD siguiente.
+4. **CI/CD (GitHub Actions).** Lint + pytest (paso 1) + build de Docker (paso 3). No tiene sentido antes, porque no habría nada real que ejecutar en el pipeline.
+5. **RAG normativo (corpus BCRA/Basilea, vector DB, hybrid search + rerank, RAGAS).** Técnicamente independiente de los pasos 1–4; puede desarrollarse en paralelo, pero debe estar resuelto antes del copiloto agéntico (paso 6), que lo consume como tool (`retrieve_policy`).
+6. **Copiloto agéntico (LangGraph).** Depende de RAG (paso 5) y de las tools ML/XAI ya existentes, idealmente ya expuestas como endpoints FastAPI (paso 2) en vez de imports directos.
+7. **Observabilidad LLM (Langfuse).** Se integra junto con el copiloto agéntico (paso 6), del que traza las llamadas a LLM; no tiene objeto antes de que exista un agente que producir trazas.
+8. **Monitoreo de drift (Evidently).** Depende de tener un flujo de scoring real corriendo (FastAPI, paso 2) sobre el cual medir drift a lo largo del tiempo; es el último eslabón porque necesita datos generados por los pasos anteriores.
+
 ## 10. Riesgos y mitigaciones
 
 | Riesgo | Prob. | Impacto | Mitigación |
