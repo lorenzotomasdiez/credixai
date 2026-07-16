@@ -27,9 +27,9 @@ flowchart LR
         api["API REST\nFastAPI"]
         docker["Contenedores\nDocker"]
         cicd["CI/CD\nGitHub Actions"]
+        rag["RAG normativo\nQdrant + OpenRouter"]
     end
     subgraph pending_ext["Extensiones de portfolio (pendientes)"]
-        rag["RAG normativo\nVector DB"]
         agent["Copiloto\nLangGraph"]
     end
     ml --> api
@@ -37,6 +37,7 @@ flowchart LR
     api --> docker
     serving --> docker
     docker --> cicd
+    rag --> api
     agent -.-> api
     agent -.-> rag
 ```
@@ -89,6 +90,8 @@ Ambos pasos corren en CI en cada push/PR a `main` (`.github/workflows/ci.yml`), 
 `src/credixai` (la lógica reutilizable) está al 100% de cobertura, salvo `dashboard.py` al 98% (la única línea sin cubrir lee el parquet real, un límite de I/O verificado manualmente).
 `app/dashboard.py` y la inicialización de la API (`get_service()`) no están cubiertos por la suite rápida a propósito: requieren el dataset real y un runtime completo (Streamlit/Uvicorn); se verifican manualmente contra datos reales, documentado en `docs/informe-final.md`.
 
+Los tests bajo `tests/rag/` que llaman a OpenRouter real están marcados `integration` y excluidos por default (`addopts = "-m 'not integration'"` en `pyproject.toml`); se corren manualmente con `uv run pytest -m integration` cuando hay `OPENROUTER_API_KEY` disponible.
+
 ## Cómo correr
 
 Con los datos ya versionados (ver sección "Datos" abajo), reproducir el pipeline completo en orden:
@@ -127,6 +130,26 @@ El contrato de las imágenes (build exitoso, healthcheck en verde con datos real
 
 ```
 bash tests/smoke/docker_smoke.sh
+```
+
+## RAG normativo
+
+`POST /rag/query` responde preguntas de política/normativa (BCRA, Basilea, adverse action, política interna) citando siempre documento y fragmento fuente.
+El corpus (`docs/policy_corpus/`) son resúmenes sintetizados con fines educativos, no el texto normativo oficial.
+Retrieval híbrido (Qdrant + BM25, fusionados con Reciprocal Rank Fusion) y reranking listwise, ambos con un único provider LLM (OpenRouter).
+
+Requiere `OPENROUTER_API_KEY` (copiar `.env.example` a `.env`) y Qdrant corriendo:
+
+```
+docker compose up -d qdrant
+uv run python scripts/06_rag_ingest.py     # ingesta el corpus (una vez, o tras cambiar docs/policy_corpus/)
+uv run uvicorn app.api:app --reload
+```
+
+Evaluación con RAGAS (faithfulness, answer relevancy), resultado y limitaciones documentadas en `docs/informe-final.md` sección 8.5:
+
+```
+uv run python scripts/07_rag_eval.py
 ```
 
 ## Datos

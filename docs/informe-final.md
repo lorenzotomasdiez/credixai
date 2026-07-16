@@ -591,3 +591,44 @@ Tras la exclusión, `ruff check .` corre limpio.
 Se empujó el commit a `main` y se confirmó con `gh run watch` que ambos jobs (`test`, `docker`) terminaron en verde sobre el runner real de GitHub, no solo que el YAML es sintácticamente válido.
 El primer run pasó con una advertencia de GitHub sobre `actions/checkout@v4` y `astral-sh/setup-uv@v5` corriendo en un runtime Node.js 20 deprecado; se actualizaron las cuatro actions del workflow a sus versiones más nuevas (`actions/checkout@v7`, `astral-sh/setup-uv@v8.3.2`, `docker/setup-buildx-action@v4`, `docker/build-push-action@v7`), verificado previamente que cada una declara `using: node24` en su `action.yml`.
 El segundo intento falló porque `setup-uv` todavía no publica un alias de versión mayor (`v8`), solo tags completos, a diferencia de las otras tres; se corrigió al tag exacto `v8.3.2` y el run final quedó en verde sin advertencias.
+
+### 8.5 RAG normativo (RF-5, RNF-8)
+
+Quinto paso de la secuencia.
+Técnicamente independiente de los pasos 1-4, pero prerrequisito del copiloto agéntico (paso 6), que lo va a consumir como tool `retrieve_policy`.
+
+**Corpus.**
+Se escribieron cuatro documentos en `docs/policy_corpus/`: gestión de riesgo crediticio (síntesis BCRA), capital y gestión de modelo (síntesis Basilea), adverse action y reason codes (síntesis Comentario CFPB a §1002.9, la misma norma ya citada en RF-4 desde la Tarea 5), y la política interna ficticia de CrediXAI que formaliza decisiones de diseño ya tomadas (umbral de decisión, límite de 4 reason codes, rango de fairness [-0.1, 0.1], alerta de PSI > 0.2).
+Cada documento incluye una nota explícita de que es un resumen sintetizado con fines educativos, no el texto normativo oficial, para no representar como auténtico un contenido reformulado.
+
+**TDD.**
+Los módulos con lógica pura (`chunking`, `hybrid_search`, `sparse_index`, `vector_store`, `reranker`, `retrieval`, `generation`, `pipeline`, `openrouter_client`) se testearon con el mismo patrón ya usado en `ScoringService`: dependencias inyectadas (embed_fn, chat_fn, vector_store, bm25_index), de forma que el test no necesita red ni credenciales.
+Cada archivo de test se escribió antes que su módulo correspondiente, se confirmó que fallaba por `ModuleNotFoundError` (rojo), y recién después se implementó el módulo hasta que la suite pasó en verde.
+Una excepción deliberada: `vector_store.py` se testea contra un `QdrantClient` real en modo `:memory:`, no contra un mock, porque Qdrant soporta ese modo sin red ni Docker y valida el wiring real en vez de una simulación.
+Se agregó un marcador `integration` a pytest (`-m "not integration"` por default) para separar estos tests rápidos de los tests que sí llaman a OpenRouter real (`tests/rag/test_openrouter_client_integration.py`), que se corren manualmente antes de dar el paso por cerrado, mismo criterio que `docker_smoke.sh` o `get_service()` en pasos anteriores.
+
+**Arquitectura.**
+Un único provider, OpenRouter, para embeddings (`openai/text-embedding-3-small`), generación grounded y reranking (`openai/gpt-4o-mini`), elegido comparando el catálogo real de OpenRouter (`gh`/`curl` contra su API) por costo/calidad: `gpt-4o-mini` es el modelo no-razonador más barato con historial probado en tareas de RAG, evitando tanto los modelos "nano" más baratos pero sin ese historial como los modelos de razonamiento, innecesariamente caros para esta tarea.
+El pipeline de retrieval es híbrido: búsqueda densa (Qdrant, embeddings) y BM25 (`rank_bm25`, keywords) corren en paralelo sobre los mismos chunks, se combinan con Reciprocal Rank Fusion (no requiere normalizar escalas de score heterogéneas entre ambos métodos), y el conjunto fusionado pasa por un reranker listwise que usa el mismo LLM en vez de un cross-encoder local, para no sumar una dependencia pesada (`torch`/`sentence-transformers`) solo para reranking.
+La generación (`PolicyAnswerer`) arma un prompt grounded que usa únicamente los chunks recuperados, y deriva las citas (RF-5: documento + fragmento) directamente de esos chunks en vez de parsear la respuesta del LLM, para que la trazabilidad no dependa de que el modelo cite bien.
+Qdrant corre dockerizado (`docker-compose.yml`, servicio `qdrant`, volumen persistente), consistente con el paso de Docker ya cerrado; los chunks con su texto se persisten aparte en `models/rag/chunks.json` porque `BM25Index` se reconstruye en memoria en cada arranque en vez de intentar persistir el índice BM25 en sí.
+
+**Bug real encontrado y corregido.**
+Durante la evaluación (ver más abajo) el reranker LLM devolvía a veces el JSON envuelto en fences de markdown (` ```json ... ``` `) pese a que el prompt pide explícitamente no incluir texto fuera del JSON, y el parseo fallaba con `ValueError`.
+Se agregó un test que reproduce el caso (TDD: rojo confirmado antes del fix) y se corrigió `LLMReranker` para extraer el contenido de un fence de markdown antes de parsear, sin relajar la validación para el resto de los casos malformados.
+
+**Endpoint.**
+`POST /rag/query` en `app/api.py`, mismo patrón que `/score` y `/explain`: `RagPipeline` se inyecta vía `get_rag_pipeline()` con `lru_cache`, y los tests HTTP (`tests/test_api_rag_http.py`) usan `dependency_overrides` con un pipeline stub, sin llamar a OpenRouter ni a Qdrant reales.
+Se verificó manualmente contra el pipeline real, con el corpus ya ingestado (`scripts/06_rag_ingest.py`): la pregunta "¿Cuántos reason codes como máximo se comunican al solicitante y por qué?" devuelve una respuesta correcta que cita `Política interna de originación y equidad de CrediXAI` y `Adverse action y reason codes`, entre otras.
+
+**Evaluación RAGAS (RNF-8) y resultado honesto.**
+Se armó un set de 14 preguntas escritas a mano, ancladas en el corpus, corridas contra el pipeline real (`scripts/07_rag_eval.py`) y evaluadas con RAGAS (`Faithfulness`, `AnswerRelevancy`) usando el mismo modelo de generación como juez, vía OpenRouter.
+El resultado no cumple de forma estable los dos umbrales de RNF-8 a la vez: en cuatro corridas completas, faithfulness promedio osciló entre 0.79 y 0.93 (umbral ≥ 0.90, cumplido en dos de las cuatro corridas) y answer relevancy promedio entre 0.70 y 0.81 (umbral ≥ 0.85, no cumplido en ninguna).
+La inspección manual de las respuestas individuales (varias decenas, a lo largo de las corridas) no encontró alucinaciones de hecho: todas las respuestas revisadas eran correctas y estaban ancladas en el contexto recuperado.
+Dos causas explican la brecha con los umbrales, verificadas puntualmente:
+
+1. **Ruido de la métrica en preguntas de definición/sigla.** La pregunta sobre PSI ("¿Qué es el PSI y qué umbral dispara una alerta de drift?") obtuvo answer relevancy consistentemente bajo (0.42-0.57) en las cuatro corridas, pese a que la respuesta es correcta y completa ("El PSI, o Population Stability Index, es..."). `AnswerRelevancy` de RAGAS genera preguntas sintéticas a partir de la respuesta y mide similitud de embeddings contra la pregunta original; una respuesta que expande una sigla antes de responder genera preguntas sintéticas que se alejan de la formulación original, penalizando el score sin que la respuesta sea menos correcta.
+2. **Elaboración razonable marcada como no soportada por el juez de faithfulness.** En la pregunta sobre validación independiente, la respuesta agregó una oración de interpretación razonable ("esto asegura que la evaluación sea objetiva...") que no está enunciada literalmente en el chunk recuperado, aunque se sigue directamente de él; el juez NLI de faithfulness la marcó como no soportada, bajando el score de esa pregunta de 0.67 a 0.20 entre corridas.
+
+Se probaron dos variantes del prompt de generación (respuestas más cortas, y respuestas que abren con una oración que reusa los términos de la pregunta) buscando subir answer relevancy; ambas empeoraron el resultado agregado en vez de mejorarlo, así que se descartaron y se mantuvo el prompt original, que fue el que mejor performó en las cuatro corridas.
+Conclusión: el sistema cumple RF-5 (cita documento + fragmento, verificado por test y manualmente) y produce respuestas groundeadas y correctas verificadas manualmente, pero no cumple de forma confiable el umbral de answer relevancy de RNF-8 con la configuración actual; se documenta como limitación abierta en vez de forzar una corrida favorable o relajar el umbral sin justificación.
