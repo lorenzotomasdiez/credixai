@@ -25,14 +25,17 @@ flowchart LR
     end
     subgraph impl_ext["Extensiones de portfolio (implementadas)"]
         api["API REST\nFastAPI"]
+        docker["Contenedores\nDocker"]
     end
     subgraph pending_ext["Extensiones de portfolio (pendientes)"]
         rag["RAG normativo\nVector DB"]
         agent["Copiloto\nLangGraph"]
-        cicd["CI/CD\nGitHub Actions + Docker"]
+        cicd["CI/CD\nGitHub Actions"]
     end
     ml --> api
     xai --> api
+    api --> docker
+    serving --> docker
     agent -.-> api
     agent -.-> rag
 ```
@@ -103,6 +106,23 @@ Para levantar la API REST (`/score`, `/explain`, docs interactivas en `/docs`):
 
 ```
 uv run uvicorn app.api:app --reload
+```
+
+## Docker
+
+API y dashboard corren en contenedores separados (un proceso por imagen, alineado con el estilo service-based del proyecto).
+`data/processed` no se hornea en la imagen porque se versiona con DVC, no con git: se monta como volumen de solo lectura en runtime.
+
+```
+docker compose up --build
+```
+
+Deja la API en `http://localhost:8000` (`/health`, `/score/{id}`, `/explain/{id}`, docs en `/docs`) y el dashboard en `http://localhost:8501`.
+
+El contrato de las imágenes (build exitoso, healthcheck en verde con datos reales montados) se valida con:
+
+```
+bash tests/smoke/docker_smoke.sh
 ```
 
 ## Datos

@@ -561,3 +561,17 @@ Por separado, se levantó la API real (`uv run uvicorn app.api:app`) contra `dat
 **Fuera de alcance de este paso:** el endpoint `/copilot` mencionado en el diseño original de la capa de serving depende del copiloto agéntico (pasos 5-6 de la secuencia de extensiones), que todavía no existe; no se agregó un stub vacío para no ofrecer una funcionalidad que no está implementada.
 
 El informe ejecutivo en lenguaje no técnico, dirigido a un público de negocio, se redactó en `docs/informe-ejecutivo.md`: resume los resultados del modelo, la segmentación, la explicabilidad, el hallazgo de amplificación de disparidad en fairness y la limitación de los contrafácticos, sin el detalle metodológico de este informe técnico.
+
+### 8.3 Contenedores (Docker)
+
+Tercer paso de la secuencia: empaqueta la API y el dashboard en imágenes reproducibles, prerrequisito del paso de CI/CD siguiente.
+TDD en sentido literal (test que falla, código que lo hace pasar) no aplica a un Dockerfile.
+El equivalente adoptado fue un contrato de smoke test escrito primero (`tests/smoke/docker_smoke.sh`): build exitoso de ambas imágenes, healthcheck en verde de la API en `/health` y del dashboard en `/_stcore/health` (endpoint nativo de Streamlit), ambas con `data/processed` montado como volumen de solo lectura.
+Se corrió el script antes de escribir los Dockerfiles y falló por la razón esperada (`Dockerfile.api: no such file or directory`, es decir, el "rojo" de este contrato); recién después se escribieron `Dockerfile.api` y `Dockerfile.dashboard` hasta que el script pasó en verde.
+
+**Diseño:** dos imágenes separadas, una por proceso (`Dockerfile.api` para `uvicorn app.api:app`, `Dockerfile.dashboard` para `streamlit run app/dashboard.py`), consistente con el estilo service-based ya elegido (`docs/architecture-style-selection.md`) en vez de un único contenedor con dos procesos.
+Ambas imágenes parten de `python:3.12-slim`, instalan dependencias con `uv sync --frozen` (reproducible por `uv.lock`) y copian solo `src/` y `app/`, sin `data/`, `notebooks/` ni `tests/` (excluidos vía `.dockerignore`).
+`data/processed` no se incorpora a la imagen: al estar versionado con DVC y no con git, se monta como volumen en runtime; esto además mantiene las imágenes reproducibles con independencia del dataset.
+`docker-compose.yml` levanta ambos servicios con los puertos y el volumen ya configurados (`docker compose up --build`).
+
+**Verificación:** además del smoke test, se levantó la API real en un contenedor con `data/processed` real montado y se confirmó `GET /score/100002` devuelve la misma probabilidad (0.4728) y decisión ("alto_riesgo") ya validadas en el paso anterior, y que `/openapi.json` expone los mismos tres paths (`/health`, `/score/{sk_id_curr}`, `/explain/{sk_id_curr}`).

@@ -1,0 +1,17 @@
+.venv/
+data/
+models/
+mlruns/
+mlflow.db
+notebooks/
+docs/
+tests/
+.git/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+htmlcov/
+.coverage
+__pycache__/
+*.pyc
+.DS_Store
