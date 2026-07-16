@@ -29,6 +29,7 @@ flowchart LR
         cicd["CI/CD\nGitHub Actions"]
         rag["RAG normativo\nQdrant + OpenRouter"]
         agent["Copiloto\nLangGraph"]
+        obs["Observabilidad LLM\nLangfuse"]
     end
     ml --> api
     xai --> api
@@ -38,6 +39,8 @@ flowchart LR
     rag --> api
     agent --> api
     agent --> rag
+    rag --> obs
+    agent --> obs
 ```
 
 Diagrama de componentes completo (incluidas las extensiones planificadas) y decisiones de arquitectura (ADRs) en `docs/`.
@@ -163,6 +166,27 @@ docker compose up -d qdrant
 uv run python scripts/06_rag_ingest.py
 uv run uvicorn app.api:app --reload
 curl -X POST http://localhost:8000/copilot/memo/100002
+```
+
+## Observabilidad (Langfuse)
+
+Todas las llamadas a LLM del proyecto (RAG y copiloto) pasan por `OpenRouterClient`, que es el unico punto donde se instrumentan como generations de Langfuse.
+`/rag/query` y `/copilot/memo/{sk_id_curr}` abren ademas un span raiz por request, asi que las generations anidadas quedan agrupadas en una sola traza sin pasar un objeto trace a mano por el pipeline o el grafo.
+Cada corrida del copiloto queda scoreada con `evaluator_passed_first_try` (si aprobo sin necesitar el reintento del evaluator-optimizer), que operacionaliza la metrica de agente de prd.md 8.3.
+
+Self-hosteado via docker-compose (Postgres + ClickHouse + Redis + MinIO + Langfuse), usando el stack oficial que publica el propio proyecto Langfuse:
+
+```
+docker compose up -d postgres clickhouse redis minio langfuse-worker langfuse-web
+```
+
+La UI queda en `http://localhost:3000`; el primer signup genera `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY`, que van al `.env` junto a `LANGFUSE_HOST=http://localhost:3000`.
+Sin esas claves, el SDK de Langfuse queda deshabilitado (no-op) y el resto del proyecto sigue funcionando igual, sin trazas.
+
+Validacion del juez LLM del evaluator-optimizer contra un golden set etiquetado a mano (TPR/TNR, umbral >= 0.90 segun prd.md 7.7), resultado y limitaciones documentados en `docs/informe-final.md` seccion 8.7:
+
+```
+uv run python scripts/08_langfuse_judge_validation.py
 ```
 
 ## Datos

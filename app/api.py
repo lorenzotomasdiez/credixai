@@ -32,6 +32,7 @@ from credixai.api import ScoringService
 from credixai.copilot.graph import build_graph, initial_state
 from credixai.copilot.tools import explain_shap, retrieve_policy, score_application
 from credixai.dashboard import load_features, train_full_model
+from credixai.observability.metrics import first_try_success
 from credixai.rag.chunking import Chunk
 from credixai.rag.generation import PolicyAnswerer
 from credixai.rag.openrouter_client import OpenRouterClient
@@ -82,6 +83,13 @@ def get_rag_pipeline() -> RagPipeline:
     )
     answerer = PolicyAnswerer(chat_fn=client.chat)
     return RagPipeline(retriever=retriever, answerer=answerer)
+
+
+@lru_cache(maxsize=1)
+def get_langfuse_client():
+    from langfuse import get_client
+
+    return get_client()
 
 
 @lru_cache(maxsize=1)
@@ -166,8 +174,16 @@ def explain(
 
 
 @app.post("/rag/query", response_model=RagQueryResponse)
-def rag_query(request: RagQueryRequest, pipeline: RagPipeline = Depends(get_rag_pipeline)) -> RagQueryResponse:
-    result = pipeline.query(request.question)
+def rag_query(
+    request: RagQueryRequest,
+    pipeline: RagPipeline = Depends(get_rag_pipeline),
+    langfuse=Depends(get_langfuse_client),
+) -> RagQueryResponse:
+    with langfuse.start_as_current_observation(
+        name="rag_query", as_type="span", input={"question": request.question}
+    ) as span:
+        result = pipeline.query(request.question)
+        span.update(output=result.answer)
     return RagQueryResponse(
         answer=result.answer,
         citations=[RagCitationResponse(**c.__dict__) for c in result.citations],
@@ -175,11 +191,24 @@ def rag_query(request: RagQueryRequest, pipeline: RagPipeline = Depends(get_rag_
 
 
 @app.post("/copilot/memo/{sk_id_curr}", response_model=CopilotMemoResponse)
-async def copilot_memo(sk_id_curr: int, graph=Depends(get_copilot_graph)) -> CopilotMemoResponse:
-    try:
-        result = await graph.ainvoke(initial_state(sk_id_curr))
-    except httpx.HTTPStatusError as exc:
-        raise HTTPException(status_code=exc.response.status_code, detail=f"SK_ID_CURR {sk_id_curr} no encontrado")
+async def copilot_memo(
+    sk_id_curr: int,
+    graph=Depends(get_copilot_graph),
+    langfuse=Depends(get_langfuse_client),
+) -> CopilotMemoResponse:
+    with langfuse.start_as_current_observation(
+        name="copilot_memo", as_type="span", input={"sk_id_curr": sk_id_curr}
+    ) as span:
+        try:
+            result = await graph.ainvoke(initial_state(sk_id_curr))
+        except httpx.HTTPStatusError as exc:
+            raise HTTPException(status_code=exc.response.status_code, detail=f"SK_ID_CURR {sk_id_curr} no encontrado")
+
+        span.update(output={"status": result["status"], "decision": result["score"]["decision"]})
+        span.score(
+            name="evaluator_passed_first_try",
+            value=1.0 if first_try_success(result.get("iteration", 0), result["status"]) else 0.0,
+        )
 
     citations = (result.get("policy_result") or {}).get("citations", [])
     return CopilotMemoResponse(

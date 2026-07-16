@@ -678,4 +678,44 @@ Se verificó manualmente contra el sistema real completo (modelo entrenado, Qdra
 - `sk_id_curr=100002` (`alto_riesgo`): el orquestador llamó a las tres tools en secuencia (`score_application` → `explain_shap` → `retrieve_policy`), el memo generado citó correctamente `Adverse action y reason codes` y `Política interna de originación y equidad de CrediXAI`, y el juez LLM rechazó la primera versión por una imprecisión real en cómo describía el umbral y por no citar las fuentes de forma explícita; el memo se redactó una segunda vez con ese feedback y volvió a ser rechazado por el mismo motivo, quedando en `needs_human_review`, el comportamiento esperado del loop evaluator-optimizer ante un caso que genuinamente no mejoró con un solo reintento.
 - `sk_id_curr=100003` (`riesgo_aceptable`): el orquestador llamó únicamente a `score_application` (8 segundos en total, contra ~64 segundos del caso anterior), sin citas, y el memo fue aprobado en el primer intento, confirmando que la decisión dinámica de qué tools llamar funciona como se diseñó.
 
+### 8.7 Observabilidad LLM (Langfuse, RNF-4)
+
+Séptimo paso de la secuencia.
+Depende del copiloto agéntico (paso 6, ya cerrado): traza las llamadas a LLM de un sistema que ya existe, tanto del RAG como del copiloto, en vez de tener objeto propio antes de que hubiera un agente produciendo trazas.
+
+**Diseño, antes de escribir código.**
+La única decisión genuinamente abierta era el modelo de hosting de Langfuse: self-hosteado vía docker-compose (Postgres, ClickHouse, Redis, MinIO, más los servicios propios de Langfuse) contra Langfuse Cloud en su plan gratuito.
+Se planteó explícitamente al usuario, con Langfuse Cloud como recomendación por menor complejidad operativa; se optó por self-hosteado, consistente con el precedente ya sentado por Qdrant en este mismo proyecto y con el encuadre "self-hosteable" que el propio PRD le da a Langfuse.
+
+**Instrumentación en un único choke point.**
+Todas las llamadas a LLM del proyecto, tanto del RAG (embeddings, generación, reranking) como del copiloto (orquestador, redacción de memo, juez), pasan por `OpenRouterClient`.
+En vez de instrumentar cada call-site, se instrumentó esa clase una sola vez: `chat`, `embed_batch` y `chat_with_tools` envuelven la llamada real con `start_as_current_observation(as_type="generation")` del SDK de Langfuse, capturando modelo, input, output y uso de tokens.
+Esto significa que ningún módulo de `rag/` o `copilot/` tuvo que cambiar para quedar trazado.
+
+**Spans raíz y anidamiento automático.**
+`/rag/query` y `/copilot/memo/{sk_id_curr}` en `app/api.py` abren un span raíz (`start_as_current_observation(as_type="span")`) con metadata de negocio (la pregunta, o `sk_id_curr`) antes de invocar el pipeline o el grafo.
+Las generations de `OpenRouterClient`, llamadas más abajo en la misma request, se anidan automáticamente bajo ese span vía propagación de contexto OTEL del SDK, sin pasar un objeto trace a mano por `retriever`/`answerer`/los nodos de LangGraph.
+Verificado contra el sistema real: una llamada a `/rag/query` generó una traza con 4 generations anidadas (embedding, rerank, generación) y costo real calculado por Langfuse; una llamada a `/copilot/memo/100003` generó una traza con 5 generations anidadas.
+
+**Métrica de agente como score nativo.**
+Cada corrida del copiloto queda scoreada en su traza con `evaluator_passed_first_try` (1 si el memo fue aprobado sin necesitar el reintento del loop evaluator-optimizer, 0 si no), calculado por la función pura `first_try_success` en `credixai/observability/metrics.py`.
+Esto operacionaliza directamente la métrica de agente definida para este paso ("% de memos que pasan el evaluator-optimizer sin corrección humana") como un score consultable en el dashboard de Langfuse, sin tener que calcularlo aparte.
+
+**TDD.**
+`extract_usage` y `first_try_success` son funciones puras (sin red, sin SDK real) y se testearon directo.
+La instrumentación de `OpenRouterClient` se testeó inyectando un Langfuse client fake (mismo patrón de DI que ya usa la clase para `api_key`), verificando que `chat`/`embed_batch`/`chat_with_tools` abren la observation correcta y la actualizan con output y uso de tokens, sin tocar red ni el SDK real.
+Los spans raíz de `/rag/query` y `/copilot/memo/{sk_id_curr}` se testearon igual, con `get_langfuse_client` inyectado vía `dependency_overrides`, verificando nombre, tipo, input del span y el score `evaluator_passed_first_try` con el valor esperado en los casos de aprobación directa y de escalado a revisión humana.
+Todo lo que no es lógica pura (que las trazas efectivamente aparezcan en la UI de Langfuse, que el stack de docker-compose levante sano) se verificó manualmente contra el sistema real, mismo criterio que Qdrant y OpenRouter.
+
+**Stack self-hosteado.**
+Se agregó a `docker-compose.yml` el stack oficial que publica el propio proyecto Langfuse (Postgres, ClickHouse, Redis, MinIO, más `langfuse-web`/`langfuse-worker`), traído tal cual en vez de reconstruido a mano, porque el wiring de secrets entre esos servicios no es trivial de reproducir de memoria sin introducir un error de configuración.
+Se verificó levantando el stack completo: los seis contenedores nuevos (`postgres`, `clickhouse`, `redis`, `minio`, `langfuse-worker`, `langfuse-web`) llegaron a estado `healthy` y `http://localhost:3000/api/public/health` respondió `200`.
+
+**Validación del juez LLM contra un golden set y resultado honesto.**
+Se armó un golden set de 10 casos (`scripts/08_langfuse_judge_validation.py`), cada uno con un memo, su contexto (score, reason codes, citas) y un veredicto humano de referencia (aprobado/rechazado), corridos contra `llm_judge` real vía OpenRouter y registrados como dataset items y traces en Langfuse.
+Los casos de "debería rechazar" incluyen afirmaciones no soportadas por el contexto y conclusiones normativas inventadas, deliberadamente elegidos para no solaparse con lo que ya atrapa el precheck determinista (cantidad de reason codes, atributos protegidos, cita presente): son el tipo de error que específicamente el juez LLM, y no el precheck, tiene que detectar.
+Resultado real, sin forzar: TPR (sensibilidad, detecta memos buenos) = 1.00 sobre el umbral objetivo (≥ 0.90); TNR (especificidad, detecta memos malos) = 0.80, por debajo del umbral.
+El único falso positivo fue un memo con cinco reason codes y una cita ("revisión humana requerida") consistente con el contexto pero no con la política real citada en el resto del proyecto: un caso ambiguo porque, aislado del precheck (que en producción sí lo rechazaría por exceder los 4 reason codes), la única señal que le queda al juez es una cita razonable aunque parcial.
+Se documenta como limitación abierta, mismo criterio que el resultado de RAGAS en la sección 8.5: el juez LLM funciona como red de seguridad secundaria detrás del precheck determinista, no como único mecanismo de control de calidad, y su TNR debajo del umbral no se resuelve ampliando el golden set hasta obtener un número favorable.
+
 Se agregó `tests/copilot/test_copilot_integration.py` (marcado `integration`, excluido del run rápido) sobre el camino `riesgo_aceptable`, para mantener la verificación automática de punta a punta razonablemente rápida; el camino `alto_riesgo` completo, con las tres tools y el loop evaluator-optimizer, quedó verificado manualmente como se describe arriba.

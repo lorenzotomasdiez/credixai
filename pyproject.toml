@@ -14,6 +14,7 @@ dependencies = [
     "httpx>=0.28.1",
     "jupyter>=1.1.1",
     "kaggle>=2.2.3",
+    "langfuse>=4.14.0",
     "langgraph>=1.2.2",
     "matplotlib>=3.11.0",
     "mlflow-skinny>=3.14.0",
