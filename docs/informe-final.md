@@ -589,3 +589,5 @@ Tras la exclusión, `ruff check .` corre limpio.
 
 **Verificación:** el equivalente de "rojo/verde" para este paso no es un test que falla localmente, sino el workflow corriendo de verdad en GitHub Actions.
 Se empujó el commit a `main` y se confirmó con `gh run watch` que ambos jobs (`test`, `docker`) terminaron en verde sobre el runner real de GitHub, no solo que el YAML es sintácticamente válido.
+El primer run pasó con una advertencia de GitHub sobre `actions/checkout@v4` y `astral-sh/setup-uv@v5` corriendo en un runtime Node.js 20 deprecado; se actualizaron las cuatro actions del workflow a sus versiones más nuevas (`actions/checkout@v7`, `astral-sh/setup-uv@v8.3.2`, `docker/setup-buildx-action@v4`, `docker/build-push-action@v7`), verificado previamente que cada una declara `using: node24` en su `action.yml`.
+El segundo intento falló porque `setup-uv` todavía no publica un alias de versión mayor (`v8`), solo tags completos, a diferencia de las otras tres; se corrigió al tag exacto `v8.3.2` y el run final quedó en verde sin advertencias.
