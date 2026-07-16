@@ -8,6 +8,15 @@ from sklearn.metrics import average_precision_score, brier_score_loss, roc_auc_s
 from credixai.modeling import NON_FEATURE_COLS, build_baseline, build_xgboost, evaluate, feature_columns
 
 
+def test_evaluate_prints_when_label_is_given(capsys):
+    y_true = [0, 1, 0, 1]
+    y_proba = [0.1, 0.9, 0.2, 0.8]
+
+    evaluate(y_true, y_proba, label="test-label")
+
+    assert "[test-label]" in capsys.readouterr().out
+
+
 def test_feature_columns_excludes_id_target_and_split():
     features = pd.DataFrame(columns=["SK_ID_CURR", "TARGET", "IS_TRAIN", "EXT_SOURCE_2", "credit_to_income"])
 

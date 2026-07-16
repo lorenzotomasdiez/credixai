@@ -50,6 +50,15 @@ def test_reason_codes_falls_back_to_generic_text_for_unmapped_feature():
     assert reasons == ["Valor de 'some_unmapped_feature' desfavorable para el perfil."]
 
 
+def test_reason_codes_returns_empty_list_when_no_positive_contributions():
+    feature_names = ["EXT_SOURCE_2", "bureau_debt_mean", "credit_to_goods"]
+    shap_row = np.array([-0.5, 0.0, -0.1])  # nothing pushes toward higher risk
+
+    reasons = reason_codes(shap_row, feature_names, top_n=4)
+
+    assert reasons == []
+
+
 def test_reason_codes_respects_top_n():
     feature_names = [f"f{i}" for i in range(10)]
     shap_row = np.arange(10, dtype=float)  # all positive, increasing

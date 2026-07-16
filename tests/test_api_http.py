@@ -93,6 +93,19 @@ def test_explain_top_n_query_param(client):
     assert len(response.json()["reason_codes"]) <= 1
 
 
+def test_score_non_numeric_id_returns_422(client):
+    response = client.get("/score/not-a-number")
+
+    assert response.status_code == 422
+
+
+def test_explain_zero_or_negative_top_n_returns_422(client):
+    # pandas Series.head(negative) silently drops rows from the end instead of
+    # erroring, so the API must reject non-positive top_n at the boundary.
+    assert client.get("/explain/1", params={"top_n": 0}).status_code == 422
+    assert client.get("/explain/1", params={"top_n": -1}).status_code == 422
+
+
 def test_openapi_docs_are_exposed(client):
     response = client.get("/openapi.json")
 

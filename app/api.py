@@ -13,7 +13,7 @@ Uso:
 
 from functools import lru_cache
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Query
 from pydantic import BaseModel
 
 from credixai.api import ScoringService
@@ -67,7 +67,9 @@ def score(sk_id_curr: int, service: ScoringService = Depends(get_service)) -> Sc
 
 @app.get("/explain/{sk_id_curr}", response_model=ExplainResponse)
 def explain(
-    sk_id_curr: int, top_n: int = 4, service: ScoringService = Depends(get_service)
+    sk_id_curr: int,
+    top_n: int = Query(default=4, ge=1),
+    service: ScoringService = Depends(get_service),
 ) -> ExplainResponse:
     try:
         result = service.explain(sk_id_curr, top_n=top_n)

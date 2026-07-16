@@ -76,7 +76,11 @@ Tests unitarios sobre `src/credixai` (features, clustering, modeling, explainabi
 
 ```
 uv run pytest
+uv run pytest --cov=credixai --cov=app --cov-report=term-missing   # con cobertura
 ```
+
+`src/credixai` (la lógica reutilizable) está al 100% de cobertura, salvo `dashboard.py` al 98% (la única línea sin cubrir lee el parquet real, un límite de I/O verificado manualmente).
+`app/dashboard.py` y la inicialización de la API (`get_service()`) no están cubiertos por la suite rápida a propósito: requieren el dataset real y un runtime completo (Streamlit/Uvicorn); se verifican manualmente contra datos reales, documentado en `docs/informe-final.md`.
 
 ## Cómo correr
 

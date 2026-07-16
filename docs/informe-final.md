@@ -539,6 +539,12 @@ La cobertura por módulo:
 
 Toda la suite corre en menos de 3 segundos (`uv run pytest`), sin advertencias propias del código (las únicas advertencias observadas son `PendingDeprecationWarning` internas de la librería `shap`, no relacionadas con este proyecto).
 
+**Revisión de cobertura (post paso 2):** después de agregar la API (sección 8.2), una revisión honesta de la suite encontró huecos reales: `src/credixai/dashboard.py` no tenía ningún test directo pese a ser el módulo del que dependen tanto el dashboard como la API, cuatro de las seis funciones de agregación relacional de `features.py` solo estaban cubiertas indirectamente por el test de integración, `reason_codes` no tenía un caso sin contribuciones positivas, y la API no validaba `top_n` en el límite del sistema.
+Este último resultó ser un bug real, no solo un hueco de test: `pandas.Series.head(top_n)` con `top_n` negativo no lanza un error, silenciosamente devuelve todas las filas menos las últimas `|top_n|`, así que un `top_n=-1` en `/explain` hubiera devuelto una lista de razones incorrecta sin ningún aviso.
+Se agregaron 15 tests más (`tests/test_dashboard.py` nuevo, más casos en `test_features.py`, `test_explainability.py` y `test_api_http.py`) y se corrigió el bug con una validación `Query(default=4, ge=1)` en `app/api.py`, siguiendo TDD: el test de `top_n` inválido se escribió primero, confirmó rojo (`200` en vez de `422`), y luego se agregó la validación.
+Con `pytest-cov` (`uv run pytest --cov=credixai --cov=app`), los cinco módulos de `src/credixai` quedaron en 100% de cobertura de líneas, salvo `dashboard.py` al 98%, con la única línea sin cubrir siendo `load_features()` (lee el parquet real, un límite de I/O verificado manualmente contra datos reales, no con datos sintéticos).
+`app/dashboard.py` (script de Streamlit) y el `get_service()` de `app/api.py` (que entrena el modelo real) quedan en 0%/93% de cobertura de forma deliberada: ambos requieren el dataset real y un runtime completo (Streamlit o Uvicorn) para ejecutarse, y ya se verificaron manualmente contra datos reales (sección 6.2 para el dashboard, sección 8.2 para la API); incluirlos en la suite rápida de `pytest` los volvería lentos y dependientes de un dataset que no está versionado en git.
+
 ### 8.2 API REST (FastAPI) - RF-8
 
 Segundo paso de la secuencia: formaliza RF-8 (scoring y explicación vía API REST) reutilizando, sin duplicar, el modelo de la Tarea 4 y el SHAP/reason codes de la Tarea 5.

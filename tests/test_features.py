@@ -2,12 +2,17 @@
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from credixai.features import (
     add_business_ratios,
     add_no_record_flags,
     aggregate_bureau,
     aggregate_bureau_balance,
+    aggregate_credit_card,
+    aggregate_installments,
+    aggregate_pos_cash,
+    aggregate_previous_application,
     build_feature_table,
     clean_days_employed,
     encode_categoricals,
@@ -109,6 +114,82 @@ def test_aggregate_bureau_balance_maps_dpd_status_and_joins_two_hops(tmp_path):
     # only credit 10 has a month with dpd_level > 0 (status "2")
     assert out.loc[1, "bb_months_dpd_sum"] == 1
     assert out.loc[1, "bb_worst_dpd_level_max"] == 2
+
+
+def test_aggregate_previous_application_groups_by_sk_id_curr(tmp_path):
+    pd.DataFrame({
+        "SK_ID_CURR": [1, 1, 1, 2],
+        "SK_ID_PREV": [100, 101, 102, 200],
+        "NAME_CONTRACT_STATUS": ["Approved", "Refused", "Approved", "Refused"],
+        "AMT_CREDIT": [10_000.0, 20_000.0, 30_000.0, 5_000.0],
+        "AMT_ANNUITY": [1_000.0, 2_000.0, 3_000.0, 500.0],
+        "DAYS_DECISION": [-10, -20, -30, -5],
+    }).to_csv(tmp_path / "previous_application.csv", index=False)
+
+    out = aggregate_previous_application(str(tmp_path))
+
+    assert out.loc[1, "prev_count"] == 3
+    assert out.loc[1, "prev_ever_refused"] == True  # noqa: E712 (pandas bool, not python bool)
+    assert out.loc[1, "prev_approval_rate"] == pytest.approx(2 / 3)
+    assert out.loc[1, "prev_credit_mean"] == pytest.approx(20_000.0)
+    assert out.loc[2, "prev_ever_refused"] == True  # noqa: E712
+    assert out.loc[2, "prev_approval_rate"] == 0.0
+
+
+def test_aggregate_pos_cash_computes_dpd_rate_and_max(tmp_path):
+    pd.DataFrame({
+        "SK_ID_CURR": [1, 1, 1, 2],
+        "SK_ID_PREV": [100, 100, 101, 200],
+        "SK_DPD": [0, 5, 0, 0],
+    }).to_csv(tmp_path / "POS_CASH_balance.csv", index=False)
+
+    out = aggregate_pos_cash(str(tmp_path))
+
+    assert out.loc[1, "pos_credits_count"] == 2  # nunique(SK_ID_PREV)
+    assert out.loc[1, "pos_months_count"] == 3
+    assert out.loc[1, "pos_dpd_rate"] == pytest.approx(1 / 3)
+    assert out.loc[1, "pos_dpd_max"] == 5
+    assert out.loc[2, "pos_dpd_rate"] == 0.0
+
+
+def test_aggregate_credit_card_computes_utilization_and_dpd(tmp_path):
+    pd.DataFrame({
+        "SK_ID_CURR": [1, 1, 2],
+        "SK_ID_PREV": [100, 100, 200],
+        "AMT_BALANCE": [500.0, 1500.0, 0.0],
+        "AMT_CREDIT_LIMIT_ACTUAL": [1000.0, 1000.0, 0.0],
+        "SK_DPD": [0, 3, 0],
+    }).to_csv(tmp_path / "credit_card_balance.csv", index=False)
+
+    out = aggregate_credit_card(str(tmp_path))
+
+    assert out.loc[1, "cc_cards_count"] == 1  # nunique(SK_ID_PREV)
+    assert out.loc[1, "cc_utilization_mean"] == pytest.approx((0.5 + 1.5) / 2)
+    assert out.loc[1, "cc_utilization_max"] == pytest.approx(1.5)
+    assert out.loc[1, "cc_dpd_rate"] == pytest.approx(0.5)
+    # limit 0 must produce NaN utilization (division by zero guard), not inf
+    assert np.isnan(out.loc[2, "cc_utilization_mean"])
+
+
+def test_aggregate_installments_computes_delay_and_shortfall(tmp_path):
+    pd.DataFrame({
+        "SK_ID_CURR": [1, 1, 2],
+        "DAYS_ENTRY_PAYMENT": [-5, -25, -3],
+        "DAYS_INSTALMENT": [-10, -10, -10],
+        "AMT_INSTALMENT": [1000.0, 1000.0, 500.0],
+        "AMT_PAYMENT": [1000.0, 800.0, 500.0],
+    }).to_csv(tmp_path / "installments_payments.csv", index=False)
+
+    out = aggregate_installments(str(tmp_path))
+
+    # payment_delay = DAYS_ENTRY_PAYMENT - DAYS_INSTALMENT
+    assert out.loc[1, "inst_delay_mean"] == pytest.approx((5 + -15) / 2)
+    assert out.loc[1, "inst_delay_max"] == 5
+    # late_flag = payment_delay > 5; only the second row (delay=-15) is not late,
+    # the first row (delay=5) is also not late (5 > 5 is False)
+    assert out.loc[1, "inst_late_rate"] == 0.0
+    assert out.loc[1, "inst_shortfall_mean"] == pytest.approx((0 + 200) / 2)
+    assert out.loc[2, "inst_delay_mean"] == pytest.approx(7)
 
 
 def _write_minimal_home_credit_tables(data_dir):
