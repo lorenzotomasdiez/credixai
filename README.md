@@ -26,16 +26,17 @@ flowchart LR
     subgraph impl_ext["Extensiones de portfolio (implementadas)"]
         api["API REST\nFastAPI"]
         docker["Contenedores\nDocker"]
+        cicd["CI/CD\nGitHub Actions"]
     end
     subgraph pending_ext["Extensiones de portfolio (pendientes)"]
         rag["RAG normativo\nVector DB"]
         agent["Copiloto\nLangGraph"]
-        cicd["CI/CD\nGitHub Actions"]
     end
     ml --> api
     xai --> api
     api --> docker
     serving --> docker
+    docker --> cicd
     agent -.-> api
     agent -.-> rag
 ```
@@ -78,9 +79,12 @@ uv sync
 Tests unitarios sobre `src/credixai` (features, clustering, modeling, explainability), con datos sintéticos generados en el propio test: no requieren el dataset de Kaggle.
 
 ```
+uv run ruff check .
 uv run pytest
 uv run pytest --cov=credixai --cov=app --cov-report=term-missing   # con cobertura
 ```
+
+Ambos pasos corren en CI en cada push/PR a `main` (`.github/workflows/ci.yml`), junto con el build de las dos imágenes Docker.
 
 `src/credixai` (la lógica reutilizable) está al 100% de cobertura, salvo `dashboard.py` al 98% (la única línea sin cubrir lee el parquet real, un límite de I/O verificado manualmente).
 `app/dashboard.py` y la inicialización de la API (`get_service()`) no están cubiertos por la suite rápida a propósito: requieren el dataset real y un runtime completo (Streamlit/Uvicorn); se verifican manualmente contra datos reales, documentado en `docs/informe-final.md`.

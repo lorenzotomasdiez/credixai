@@ -575,3 +575,17 @@ Ambas imágenes parten de `python:3.12-slim`, instalan dependencias con `uv sync
 `docker-compose.yml` levanta ambos servicios con los puertos y el volumen ya configurados (`docker compose up --build`).
 
 **Verificación:** además del smoke test, se levantó la API real en un contenedor con `data/processed` real montado y se confirmó `GET /score/100002` devuelve la misma probabilidad (0.4728) y decisión ("alto_riesgo") ya validadas en el paso anterior, y que `/openapi.json` expone los mismos tres paths (`/health`, `/score/{sk_id_curr}`, `/explain/{sk_id_curr}`).
+
+### 8.4 CI/CD (GitHub Actions)
+
+Cuarto paso de la secuencia: automatiza en cada push/PR a `main` lo que hasta este punto se corría solo manualmente (lint, tests, build de las imágenes Docker).
+Se agregó `ruff` como dependencia de desarrollo (no existía linter configurado en el proyecto) y se corrió primero contra el estado real del repo: encontró un único hallazgo, un import fuera de la parte superior de una celda en `notebooks/05_xai.ipynb`.
+Se decidió excluir `notebooks/` del alcance de `ruff` (`[tool.ruff] extend-exclude`) en lugar de reordenar la celda, consistente con el criterio ya aplicado en la sección 8.1: los notebooks son exploratorios por convención del proyecto y no reciben la misma exigencia que el código formalizado en `src/`, `app/` y `tests/`.
+Tras la exclusión, `ruff check .` corre limpio.
+
+**Diseño:** `.github/workflows/ci.yml` define dos jobs.
+`test` corre `uv sync`, `ruff check .` y `pytest` sobre `ubuntu-latest`.
+`docker` depende de `test` (`needs: test`) y construye las dos imágenes (`Dockerfile.api`, `Dockerfile.dashboard`) sin publicarlas (`push: false`), ya que el proyecto no tiene todavía un registry configurado; el objetivo de este paso es validar que las imágenes siguen siendo reproducibles en un entorno limpio, no distribuirlas.
+
+**Verificación:** el equivalente de "rojo/verde" para este paso no es un test que falla localmente, sino el workflow corriendo de verdad en GitHub Actions.
+Se empujó el commit a `main` y se confirmó con `gh run watch` que ambos jobs (`test`, `docker`) terminaron en verde sobre el runner real de GitHub, no solo que el YAML es sintácticamente válido.
