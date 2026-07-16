@@ -749,6 +749,7 @@ dependencies = [
     { name = "alembic" },
     { name = "dice-ml" },
     { name = "fairlearn" },
+    { name = "fastapi" },
     { name = "jupyter" },
     { name = "kaggle" },
     { name = "matplotlib" },
@@ -762,12 +763,14 @@ dependencies = [
     { name = "skops" },
     { name = "sqlalchemy" },
     { name = "streamlit" },
+    { name = "uvicorn" },
     { name = "xgboost" },
 ]
 
 [package.dev-dependencies]
 dev = [
     { name = "dvc" },
+    { name = "httpx" },
     { name = "pytest" },
 ]
 
@@ -776,6 +779,7 @@ requires-dist = [
     { name = "alembic", specifier = ">=1.18.5" },
     { name = "dice-ml", specifier = ">=0.12" },
     { name = "fairlearn", specifier = ">=0.14.0" },
+    { name = "fastapi", specifier = ">=0.139.0" },
     { name = "jupyter", specifier = ">=1.1.1" },
     { name = "kaggle", specifier = ">=2.2.3" },
     { name = "matplotlib", specifier = ">=3.11.0" },
@@ -789,12 +793,14 @@ requires-dist = [
     { name = "skops", specifier = ">=0.14.0" },
     { name = "sqlalchemy", specifier = ">=2.0.51" },
     { name = "streamlit", specifier = ">=1.59.1" },
+    { name = "uvicorn", specifier = ">=0.51.0" },
     { name = "xgboost", specifier = ">=3.3.0" },
 ]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "dvc", specifier = ">=3.67.1" },
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "pytest", specifier = ">=9.1.1" },
 ]
 

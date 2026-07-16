@@ -539,4 +539,19 @@ La cobertura por módulo:
 
 Toda la suite corre en menos de 3 segundos (`uv run pytest`), sin advertencias propias del código (las únicas advertencias observadas son `PendingDeprecationWarning` internas de la librería `shap`, no relacionadas con este proyecto).
 
+### 8.2 API REST (FastAPI) - RF-8
+
+Segundo paso de la secuencia: formaliza RF-8 (scoring y explicación vía API REST) reutilizando, sin duplicar, el modelo de la Tarea 4 y el SHAP/reason codes de la Tarea 5.
+Se desarrolló con TDD a partir de este paso: los archivos `tests/test_api_service.py` y `tests/test_api_http.py` se escribieron primero (contra un módulo `credixai.api` que todavía no existía, confirmando que fallaban por `ModuleNotFoundError`), y luego se implementó `src/credixai/api.py` y `app/api.py` hasta que la suite completa pasó en verde.
+
+**Diseño:** `ScoringService` (`src/credixai/api.py`) envuelve el mismo bundle que ya produce `credixai.dashboard.train_full_model` (modelo, features, probabilidades, umbral) y responde consultas por `SK_ID_CURR`.
+A diferencia del dashboard, que precalcula SHAP solo sobre una muestra de 2.000 solicitudes por motivos de UI, `ScoringService.explain` calcula SHAP bajo demanda para la fila puntual solicitada con `shap.TreeExplainer`, lo que permite explicar cualquier solicitud de la población, no solo las de la muestra.
+`app/api.py` es el entrypoint delgado (patrón ya usado en `app/dashboard.py`): dos endpoints, `GET /score/{sk_id_curr}` y `GET /explain/{sk_id_curr}`, con esquemas de respuesta Pydantic y documentación OpenAPI automática en `/docs`.
+Los reason codes solo se devuelven cuando la decisión es "alto_riesgo", igual que en el dashboard, y nunca incluyen atributos protegidos, verificado explícitamente por test.
+
+**Verificación:** la suite de tests (`tests/test_api_service.py`, `tests/test_api_http.py`) usa un bundle sintético inyectado por `dependency_overrides` de FastAPI, sin tocar `data/processed` ni reentrenar el modelo real, para que corra en segundos.
+Por separado, se levantó la API real (`uv run uvicorn app.api:app`) contra `data/processed/features.parquet` y se confirmó manualmente: `/health` responde `{"status": "ok"}`, `/score/100002` devuelve probabilidad 0.4728 y decisión "alto_riesgo" (umbral 0.2114, el mismo ya validado en el dashboard de la Tarea 6), `/explain/100002` devuelve un valor SHAP por feature más los reason codes, y un `SK_ID_CURR` inexistente devuelve `404`.
+
+**Fuera de alcance de este paso:** el endpoint `/copilot` mencionado en el diseño original de la capa de serving depende del copiloto agéntico (pasos 5-6 de la secuencia de extensiones), que todavía no existe; no se agregó un stub vacío para no ofrecer una funcionalidad que no está implementada.
+
 El informe ejecutivo en lenguaje no técnico, dirigido a un público de negocio, se redactó en `docs/informe-ejecutivo.md`: resume los resultados del modelo, la segmentación, la explicabilidad, el hallazgo de amplificación de disparidad en fairness y la limitación de los contrafácticos, sin el detalle metodológico de este informe técnico.

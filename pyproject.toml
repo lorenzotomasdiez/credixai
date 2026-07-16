@@ -10,6 +10,7 @@ dependencies = [
     "alembic>=1.18.5",
     "dice-ml>=0.12",
     "fairlearn>=0.14.0",
+    "fastapi>=0.139.0",
     "jupyter>=1.1.1",
     "kaggle>=2.2.3",
     "matplotlib>=3.11.0",
@@ -23,6 +24,7 @@ dependencies = [
     "skops>=0.14.0",
     "sqlalchemy>=2.0.51",
     "streamlit>=1.59.1",
+    "uvicorn>=0.51.0",
     "xgboost>=3.3.0",
 ]
 
@@ -36,8 +38,10 @@ build-backend = "uv_build"
 [dependency-groups]
 dev = [
     "dvc>=3.67.1",
+    "httpx>=0.28.1",
     "pytest>=9.1.1",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]

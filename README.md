@@ -23,12 +23,18 @@ flowchart LR
         data --> cluster["Segmentación\nK-Means"]
         cluster --> serving
     end
-    subgraph ext["Extensiones de portfolio (no implementadas)"]
+    subgraph impl_ext["Extensiones de portfolio (implementadas)"]
         api["API REST\nFastAPI"]
+    end
+    subgraph pending_ext["Extensiones de portfolio (pendientes)"]
         rag["RAG normativo\nVector DB"]
         agent["Copiloto\nLangGraph"]
+        cicd["CI/CD\nGitHub Actions + Docker"]
     end
-    serving -.-> api
+    ml --> api
+    xai --> api
+    agent -.-> api
+    agent -.-> rag
 ```
 
 Diagrama de componentes completo (incluidas las extensiones planificadas) y decisiones de arquitectura (ADRs) en `docs/`.
@@ -87,6 +93,12 @@ Para explorar los resultados de forma interactiva (dashboard con métricas, segm
 
 ```
 uv run streamlit run app/dashboard.py
+```
+
+Para levantar la API REST (`/score`, `/explain`, docs interactivas en `/docs`):
+
+```
+uv run uvicorn app.api:app --reload
 ```
 
 ## Datos
