@@ -518,4 +518,25 @@ La documentación de API vía FastAPI/OpenAPI se definió desde el inicio del pr
 No se implementó en esta sesión: el sistema expone sus resultados únicamente a través del dashboard Streamlit de la Tarea 6, no de una API REST.
 Queda como trabajo futuro, junto con el RAG normativo y el copiloto agéntico, consistente con el principio de gestión de scope adoptado para priorizar primero el núcleo académico completo.
 
+---
+
+## 8. Extensiones de portfolio
+
+Con el núcleo académico (tareas 1-7) cerrado, lo que sigue son las tres capas avanzadas del proyecto (RAG, agentes, MLOps/LLMOps), ejecutadas en un orden definido por dependencia técnica real entre componentes, no por el orden cronológico del roadmap original.
+Cada paso de esta secuencia se documenta como una subsección propia a medida que se completa.
+
+### 8.1 Tests automatizados (`pytest`)
+
+Primer paso de la secuencia: sin tests, un pipeline de CI/CD solo podría lintear código, no validar que se comporta como se espera.
+Se agregaron 21 tests unitarios sobre las cuatro funciones reutilizables del proyecto (`src/credixai/features.py`, `clustering.py`, `modeling.py`, `explainability.py`), todos con datos sintéticos generados dentro del propio test, sin depender del dataset real de Kaggle ni de archivos versionados con DVC, para que la suite corra en cualquier entorno sin necesidad de descargar datos.
+
+La cobertura por módulo:
+
+- **`features.py`:** limpieza del centinela de `DAYS_EMPLOYED`, ratios de negocio (incluida la división por ingreso cero, que debe dar `NaN` y no `inf` ni una excepción), flags de "sin historial", one-hot de categóricas, cada función de agregación relacional (`aggregate_bureau`, `aggregate_bureau_balance`) contra CSVs mínimos escritos en un directorio temporal, y un test de integración de punta a punta de `build_feature_table` con una versión minúscula (2-3 solicitantes) de las 8 tablas del dataset.
+- **`clustering.py`:** derivación de `AGE_YEARS`/`EMPLOYED_YEARS`, que `fit_clustering` entrena solo sobre `IS_TRAIN == 1`, que `assign_clusters` cubre a toda la población (train y test), y que `build_segments` separa correctamente dos grupos sintéticos con ingresos claramente distintos en clusters distintos.
+- **`modeling.py`:** que `feature_columns` excluye exactamente `SK_ID_CURR`/`TARGET`/`IS_TRAIN`, que `evaluate` reproduce de forma exacta las métricas de referencia de scikit-learn (ROC-AUC, PR-AUC, Brier), y que tanto el baseline como XGBoost entrenan y predicen probabilidades válidas sobre datos sintéticos, incluido un caso con valores faltantes para validar el manejo nativo de NaN de XGBoost.
+- **`explainability.py`:** que `mean_abs_shap` ordena correctamente por magnitud promedio, que `reason_codes` nunca incluye un atributo protegido aunque tenga la mayor contribución positiva (el caso más importante de todo el proyecto para esta suite), que respeta el orden descendente y el límite `top_n`, y que `fairness_report` reproduce de forma exacta las métricas de referencia de Fairlearn sobre un caso sintético que simula el mismo patrón de amplificación de disparidad documentado en la sección 5.4.
+
+Toda la suite corre en menos de 3 segundos (`uv run pytest`), sin advertencias propias del código (las únicas advertencias observadas son `PendingDeprecationWarning` internas de la librería `shap`, no relacionadas con este proyecto).
+
 El informe ejecutivo en lenguaje no técnico, dirigido a un público de negocio, se redactó en `docs/informe-ejecutivo.md`: resume los resultados del modelo, la segmentación, la explicabilidad, el hallazgo de amplificación de disparidad en fairness y la limitación de los contrafácticos, sin el detalle metodológico de este informe técnico.

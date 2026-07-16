@@ -64,6 +64,14 @@ tests/          # tests automatizados
 uv sync
 ```
 
+## Tests
+
+Tests unitarios sobre `src/credixai` (features, clustering, modeling, explainability), con datos sintéticos generados en el propio test: no requieren el dataset de Kaggle.
+
+```
+uv run pytest
+```
+
 ## Cómo correr
 
 Con los datos ya versionados (ver sección "Datos" abajo), reproducir el pipeline completo en orden:
