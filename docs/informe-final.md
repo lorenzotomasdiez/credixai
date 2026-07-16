@@ -409,4 +409,61 @@ La lógica se transcribió a `src/credixai/modeling.py` (`build_baseline`, `buil
 
 ## 5. Explicabilidad y fairness
 
-_Pendiente._
+### 5.1 SHAP global: importancia y estabilidad del ranking
+
+Se calculó SHAP (`TreeExplainer`, exacto para modelos de árboles) sobre una muestra aleatoria de 5.000 solicitudes del set de entrenamiento.
+El ranking por magnitud promedio de SHAP confirma el top-3 ya visto en el EDA y en la importancia por `gain` de la Tarea 4: `EXT_SOURCE_2`, `EXT_SOURCE_3` y `EXT_SOURCE_1`, con diferencia las variables más predictivas del dataset.
+Le siguen variables de agregación construidas en la Tarea 2 (`prev_annuity_mean`, `credit_to_goods`, `prev_credit_mean`, `bureau_debt_mean`), lo que vuelve a validar ese trabajo de feature engineering con una métrica de explicabilidad independiente del `gain`.
+`CODE_GENDER_M` cae al puesto 16 por SHAP (mean_abs_shap=0.070), más abajo que en el ranking por `gain` de la Tarea 4 (puesto 4): la diferencia se explica porque `gain` es sensible a splits puntuales de alto impacto aunque afecten pocas filas, mientras que SHAP mide el impacto promedio sobre toda la población.
+Que la variable siga en el top-20 con dos métricas distintas refuerza, no debilita, la necesidad de la auditoría de fairness de este capítulo.
+
+Para poder usar SHAP con confianza en explicaciones individuales, se midió la estabilidad del ranking mediante bootstrap: 30 remuestreos con reposición de la muestra de 5.000 filas, comparando cada ranking resultante contra el de referencia con el coeficiente de Kendall tau.
+Resultado: tau = 0.9917 ± 0.0010, muy por encima del piso de referencia de 0.90 tomado como objetivo del proyecto para explicaciones estables.
+El orden de importancia de las features, por lo tanto, no depende del subconjunto de solicitudes que se mire.
+
+### 5.2 SHAP local: explicación por solicitud
+
+Se inspeccionaron tres solicitudes de la muestra: la de mayor probabilidad de default predicha (proba=0.8583), la de menor (proba=0.0020) y una cerca del umbral de decisión (proba=0.4992), usando gráficos de tipo waterfall.
+En la de mayor riesgo, el motor principal es un `EXT_SOURCE_2` bajo (0.108), reforzado por una tasa de atraso en cuotas previas alta y una relación crédito/bien elevada; ningún otro feature individual se acerca a esa magnitud, aunque el conjunto de las ~292 features restantes también aporta una parte significativa del empuje total.
+En la de menor riesgo, `EXT_SOURCE_2` y `EXT_SOURCE_3` altos dominan la explicación, en el sentido esperado.
+El caso cercano al umbral es el más ilustrativo: `EXT_SOURCE_2` muy bajo empuja fuerte hacia el riesgo, pero `EXT_SOURCE_1` relativamente alto empuja en la dirección contraria, y el resto de las señales terminan casi cancelándose, dejando la probabilidad casi exactamente en el borde de decisión.
+En ninguno de los tres casos `CODE_GENDER_M` aparece entre las diez contribuciones individuales más grandes, algo esperable dada su magnitud promedio moderada; su efecto se audita de forma agregada en la sección 5.4, no caso a caso.
+
+### 5.3 Reason codes y exclusión de atributos protegidos
+
+Se implementó una función de reason codes que, para una solicitud dada, toma las features con mayor contribución positiva a SHAP (las que empujan hacia mayor riesgo) y las traduce a un texto legible de negocio, no al nombre crudo de la columna, siguiendo el criterio de máximo cuatro razones que suele considerarse útil para un solicitante.
+La función excluye de forma explícita a los atributos protegidos/proxy (`CODE_GENDER_M`, `CODE_GENDER_F`, `DAYS_BIRTH`) de cualquier reason code, aun cuando el modelo los use internamente: que el modelo use una variable protegida de forma medible es un hecho a auditar (sección 5.4), pero comunicársela a un solicitante como motivo de rechazo es una práctica distinta, y no permitida.
+Para la solicitud de mayor riesgo, las razones generadas fueron: score de riesgo externo bajo, tasa de atraso en cuotas previas, relación crédito/bien elevada e historial corto de créditos de consumo previos; todas coherentes con la explicación SHAP local de la sección 5.2.
+
+### 5.4 Auditoría de fairness: el modelo amplifica la disparidad real
+
+Se auditó el modelo con tres métricas de fairness sobre género (`CODE_GENDER_M`) y grupo etario (bucketizado a partir de `DAYS_BIRTH`): diferencia de paridad estadística (statistical parity difference), razón de impacto dispar (disparate impact) y diferencia de igualdad de oportunidad (equal opportunity difference), dentro de un rango de referencia de [-0.1, 0.1] para las diferencias (convención habitual en la literatura de fairness).
+La decisión binaria "alto riesgo" se definió con un umbral reproducible: el percentil que marca como alto riesgo a la misma proporción de solicitudes (8.07%) que la tasa real de default, evitando introducir un umbral de negocio arbitrario no definido en el alcance del proyecto.
+
+| Grupo | Statistical parity diff | Disparate impact (ratio) | Equal opportunity diff |
+|---|---|---|---|
+| Género | 0.0608 (dentro de rango) | 0.496 (falla la regla del 80%) | 0.1315 (fuera de rango) |
+| Edad (<30 vs. 60+) | 0.1282 (fuera de rango) | 0.134 (falla la regla del 80%) | 0.3257 (fuera de rango) |
+
+El hallazgo central de esta sección no es solo que existan disparidades, sino que el modelo las amplifica respecto de la disparidad real observada en los datos.
+En género, la brecha real de default es de 3.14 puntos porcentuales (10.14% en hombres vs. 6.99% en mujeres, ratio 0.690); el modelo la traduce en una brecha de "alto riesgo" predicho de 6.08 puntos (ratio 0.496), prácticamente el doble tanto en puntos porcentuales como en el ratio.
+En edad, el mismo patrón es más marcado: brecha real de 6.52 puntos entre menores de 30 y mayores de 60 (ratio 0.430) contra una brecha predicha de 12.82 puntos (ratio 0.134), otra vez más del doble.
+El caso de género es el más sutil de comunicar con una sola métrica: la diferencia en puntos porcentuales queda dentro del rango de referencia por la baja tasa base general de default (8.07%), pero el ratio (disparate impact) y la diferencia de igualdad de oportunidad, que no dependen de esa escala, muestran una disparidad clara.
+Mirar una sola métrica de fairness hubiera dado, en este caso, un falso resultado aprobatorio; el grupo etario, en cambio, falla las tres métricas sin ambigüedad.
+
+Esta evidencia cuantitativa establece que tratar el género y la edad como simples atributos proxy subestima el problema: no es una correlación incidental con el riesgo real, es una amplificación medible que debe documentarse como limitación conocida del modelo.
+Como líneas de mitigación para trabajo futuro, fuera del alcance de este capítulo, quedan: (1) thresholding con restricción de fairness (por ejemplo, `ThresholdOptimizer` de Fairlearn), o (2) remover o neutralizar `CODE_GENDER` y las variables más correlacionadas con edad antes de entrenar, y volver a medir si la amplificación persiste por la vía de otras features proxy.
+
+### 5.5 Contrafácticos (DiCE): una limitación real, no un bug a resolver
+
+Se intentó generar contrafácticos con DiCE (método `random`) para la solicitud de mayor riesgo, variando solo un subconjunto reducido y deliberado de features (monto de cuota, monto y precio del bien financiado), excluyendo explícitamente atributos protegidos y los `EXT_SOURCE_*` (scores externos no accionables por el solicitante).
+DiCE no admite valores faltantes en la fila de consulta, a diferencia de XGBoost, que maneja los NaN de forma nativa; imputar la fila completa a la mediana para poder usar la herramienta cambió la predicción del modelo lo suficiente como para cruzar el umbral de decisión (de 0.8583 con NaN nativos a 0.4618 imputada), invalidando el contrafactico como explicación fiel de esa decisión real.
+Se intentó acotar el problema restringiendo la búsqueda a solicitudes sin ningún valor faltante (21 de 5.000 en la muestra), pero ninguna de esas 21 filas supera el umbral de decisión: en este dataset, tener historial completo en las 6 tablas relacionales está asociado casi sin excepción a bajo riesgo, de modo que no existe un caso representativo de "solicitud rechazada con historial completo" sobre el cual demostrar el contrafactico.
+
+La conclusión de esta sección es en sí misma un hallazgo de arquitectura, no un problema de configuración: DiCE, tal como está implementado en la librería utilizada, requiere filas completas, pero el manejo nativo de NaN es parte central de cómo XGBoost calcula el riesgo en este dataset, y esas dos cosas son incompatibles exactamente para la población que más necesitaría una explicación contrafactica accionable, los solicitantes con historial incompleto.
+Como trabajo futuro, se identifican dos caminos: generar contrafácticos solo sobre el subconjunto de features que nunca tienen NaN (con pérdida de cobertura del historial crediticio), o reemplazar DiCE por un método de contrafácticos que perturbe features sin necesidad de imputar el resto de la fila.
+
+### 5.6 Persistencia y formalización
+
+El cálculo de SHAP, los reason codes y la auditoría de fairness se transcribieron a `src/credixai/explainability.py` (`compute_shap`, `mean_abs_shap`, `reason_codes`, `fairness_report`) y a un script ejecutable `scripts/05_explainability.py` (`uv run python scripts/05_explainability.py`), verificado end-to-end: reprodujo de forma exacta el ranking SHAP, los reason codes y las métricas de fairness obtenidas en el notebook.
+Los contrafácticos con DiCE quedan únicamente en `notebooks/05_xai.ipynb` como prueba de concepto de la técnica, dada la limitación de compatibilidad con NaN documentada en la sección 5.5: no se formalizaron en `src/` ni en el script, para no ofrecer como funcionalidad de producción algo que no es fiable para la población que más lo necesitaría.
