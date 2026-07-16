@@ -52,6 +52,7 @@ El estilo elegido es service-based, justificado en `docs/architecture-style-sele
 
 | Documento | Contenido |
 |---|---|
+| `docs/guia-de-usuario.md` | Cómo usar la app paso a paso: dashboard, preguntas al RAG normativo y memo del copiloto (sin escribir código) |
 | `docs/informe-final.md` | Metodología y resultados completos, tarea por tarea (EDA, features, clustering, modelado, XAI/fairness, dashboard) |
 | `docs/informe-ejecutivo.md` | Resumen para público no técnico |
 | `docs/model-card.md` | Performance, fairness, limitaciones y uso previsto del modelo |
