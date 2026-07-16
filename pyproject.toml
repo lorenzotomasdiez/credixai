@@ -9,6 +9,7 @@ requires-python = ">=3.12"
 dependencies = [
     "alembic>=1.18.5",
     "dice-ml>=0.12",
+    "evidently>=0.4.36",
     "fairlearn>=0.14.0",
     "fastapi>=0.139.0",
     "httpx>=0.28.1",

@@ -30,6 +30,7 @@ flowchart LR
         rag["RAG normativo\nQdrant + OpenRouter"]
         agent["Copiloto\nLangGraph"]
         obs["Observabilidad LLM\nLangfuse"]
+        drift["Monitoreo de drift\nEvidently"]
     end
     ml --> api
     xai --> api
@@ -41,6 +42,7 @@ flowchart LR
     agent --> rag
     rag --> obs
     agent --> obs
+    api --> drift
 ```
 
 Diagrama de componentes completo (incluidas las extensiones planificadas) y decisiones de arquitectura (ADRs) en `docs/`.
@@ -188,6 +190,20 @@ Validacion del juez LLM del evaluator-optimizer contra un golden set etiquetado 
 ```
 uv run python scripts/08_langfuse_judge_validation.py
 ```
+
+## Monitoreo de drift (Evidently)
+
+`GET /score/{sk_id_curr}` loguea cada predicción real (timestamp, `sk_id_curr`, probabilidad, decisión) en `models/monitoring/prediction_log.jsonl`, un log append-only.
+
+Como el dataset es estático (Home Credit Default Risk, Kaggle) y no hay tráfico productivo real, la población "actual" para medir drift es `application_test` (`IS_TRAIN==0` en `features.parquet`): solicitudes reales que Kaggle reserva sin `TARGET` para su competencia, nunca usadas para entrenar el modelo.
+La referencia es `application_train` (`IS_TRAIN==1`), la población sobre la que se entrenó.
+
+```
+uv run python scripts/09_drift_report.py
+```
+
+Batch-scorea las ~48.700 solicitudes de `application_test` (logueando cada predicción con el mismo mecanismo que `/score`), corre Evidently (`DataDriftPreset`, PSI por columna, umbral de alerta > 0.2 según RNF-4) y guarda el reporte en `models/monitoring/drift_report.html`.
+Resultado real (sin perturbación sintética), documentado en `docs/informe-final.md` sección 8.8: 6 de 301 columnas superan el umbral, la más notable `bb_no_record` (PSI≈1.55), consistente con una diferencia real de cobertura de `bureau_balance` entre las dos poblaciones ya señalada en la Tarea 2.
 
 ## Datos
 

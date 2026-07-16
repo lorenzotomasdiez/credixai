@@ -38,11 +38,12 @@ def _synthetic_service():
 
 
 @pytest.fixture
-def client():
-    from app.api import app, get_service
+def client(tmp_path):
+    from app.api import app, get_prediction_log_path, get_service
 
     service = _synthetic_service()
     app.dependency_overrides[get_service] = lambda: service
+    app.dependency_overrides[get_prediction_log_path] = lambda: str(tmp_path / "prediction_log.jsonl")
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()

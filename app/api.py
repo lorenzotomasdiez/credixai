@@ -20,6 +20,7 @@ Uso:
 
 import json
 import os
+from datetime import datetime, timezone
 from functools import lru_cache, partial
 
 import httpx
@@ -32,6 +33,7 @@ from credixai.api import ScoringService
 from credixai.copilot.graph import build_graph, initial_state
 from credixai.copilot.tools import explain_shap, retrieve_policy, score_application
 from credixai.dashboard import load_features, train_full_model
+from credixai.monitoring.logging import append_log_entry, format_log_entry
 from credixai.observability.metrics import first_try_success
 from credixai.rag.chunking import Chunk
 from credixai.rag.generation import PolicyAnswerer
@@ -47,6 +49,7 @@ load_dotenv()
 RAG_CHUNKS_PATH = "models/rag/chunks.json"
 RAG_COLLECTION_NAME = "policy_chunks"
 RAG_EMBEDDING_SIZE = 1536
+PREDICTION_LOG_PATH = "models/monitoring/prediction_log.jsonl"
 
 app = FastAPI(
     title="CrediXAI API",
@@ -60,6 +63,10 @@ def get_service() -> ScoringService:
     features = load_features()
     bundle = train_full_model(features)
     return ScoringService(bundle)
+
+
+def get_prediction_log_path() -> str:
+    return PREDICTION_LOG_PATH
 
 
 @lru_cache(maxsize=1)
@@ -152,11 +159,17 @@ def health() -> dict:
 
 
 @app.get("/score/{sk_id_curr}", response_model=ScoreResponse)
-def score(sk_id_curr: int, service: ScoringService = Depends(get_service)) -> ScoreResponse:
+def score(
+    sk_id_curr: int,
+    service: ScoringService = Depends(get_service),
+    log_path: str = Depends(get_prediction_log_path),
+) -> ScoreResponse:
     try:
         result = service.score(sk_id_curr)
     except KeyError:
         raise HTTPException(status_code=404, detail=f"SK_ID_CURR {sk_id_curr} no encontrado")
+    entry = format_log_entry(result, timestamp=datetime.now(timezone.utc).isoformat())
+    append_log_entry(entry, log_path)
     return ScoreResponse(**result.__dict__)
 
 
