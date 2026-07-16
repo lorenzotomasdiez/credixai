@@ -1,9 +1,49 @@
 # CrediXAI
 
-Sistema de scoring crediticio explicable, con RAG sobre normativa BCRA/Basilea y copiloto agéntico, desarrollado como Práctica Profesionalizante (Tecnicatura Superior en Data Science, Teclab).
+Un modelo de scoring crediticio que, además de predecir riesgo de default, audita si esa predicción es equitativa entre grupos, y lo demuestra: encontró que el modelo amplifica al doble la disparidad real de default por género y edad, un hallazgo que un scoring de caja negra nunca hubiera expuesto.
 
-- Producto/alcance: `prd.md`
-- Decisiones de arquitectura: `docs/`
+Desarrollado como Práctica Profesionalizante (Tecnicatura Superior en Data Science, Teclab), sobre el dataset Home Credit Default Risk (Kaggle).
+
+## Resultado técnico
+
+- **ROC-AUC 0.7815** en holdout (0.7802 ± 0.0032 en validación cruzada de 5 folds), +1.6 puntos sobre el baseline de Regresión Logística.
+- **Explicaciones SHAP estables:** Kendall tau = 0.9917 ± 0.0010 sobre 30 remuestreos bootstrap del ranking de importancia.
+- **Auditoría de fairness cuantificada:** el modelo amplifica la brecha real de default por género y edad en aproximadamente 2x (detalle en `docs/model-card.md` y `docs/informe-final.md` sección 5.4).
+- **Reason codes de adverse action** que excluyen atributos protegidos de la comunicación al solicitante, aun cuando el modelo los usa internamente.
+
+## Arquitectura
+
+```mermaid
+flowchart LR
+    subgraph nucleo["Núcleo académico (implementado)"]
+        data["Data & Feature Store\nPandas + DVC"] --> ml["ML Scoring\nXGBoost"]
+        ml --> xai["XAI\nSHAP + Fairlearn"]
+        ml --> serving["Serving\nStreamlit"]
+        xai --> serving
+        data --> cluster["Segmentación\nK-Means"]
+        cluster --> serving
+    end
+    subgraph ext["Extensiones de portfolio (no implementadas)"]
+        api["API REST\nFastAPI"]
+        rag["RAG normativo\nVector DB"]
+        agent["Copiloto\nLangGraph"]
+    end
+    serving -.-> api
+```
+
+Diagrama de componentes completo (incluidas las extensiones planificadas) y decisiones de arquitectura (ADRs) en `docs/`.
+El estilo elegido es service-based, justificado en `docs/architecture-style-selection.md`.
+
+## Documentación
+
+| Documento | Contenido |
+|---|---|
+| `docs/informe-final.md` | Metodología y resultados completos, tarea por tarea (EDA, features, clustering, modelado, XAI/fairness, dashboard) |
+| `docs/informe-ejecutivo.md` | Resumen para público no técnico |
+| `docs/model-card.md` | Performance, fairness, limitaciones y uso previsto del modelo |
+| `docs/adr/` | Decisiones de arquitectura (ADRs) |
+| `docs/architecture-characteristics.md`, `docs/architecture-style-selection.md` | Trade-offs de diseño |
+| `prd.md` | Producto y alcance completo del proyecto |
 
 ## Estructura del repo
 
@@ -12,8 +52,9 @@ data/           # datos crudos y procesados (versionados con DVC, no con git)
 notebooks/      # notebooks por tarea (EDA, features, clustering, XAI...)
 scripts/        # entrypoints reproducibles por tarea (ej. 02_features.py)
 src/credixai/   # paquete Python reutilizable
+app/            # dashboard Streamlit (entrypoint delgado sobre src/credixai)
 models/         # artefactos de modelos entrenados
-docs/           # architecture characteristics, ADRs, diagramas
+docs/           # informes, model card, architecture characteristics, ADRs, diagramas
 tests/          # tests automatizados
 ```
 
@@ -21,6 +62,23 @@ tests/          # tests automatizados
 
 ```
 uv sync
+```
+
+## Cómo correr
+
+Con los datos ya versionados (ver sección "Datos" abajo), reproducir el pipeline completo en orden:
+
+```
+uv run python scripts/02_features.py
+uv run python scripts/03_clustering.py
+uv run python scripts/04_modeling.py
+uv run python scripts/05_explainability.py
+```
+
+Para explorar los resultados de forma interactiva (dashboard con métricas, segmentación, fairness y explicación por solicitud):
+
+```
+uv run streamlit run app/dashboard.py
 ```
 
 ## Datos

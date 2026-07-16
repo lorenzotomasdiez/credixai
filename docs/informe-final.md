@@ -491,4 +491,31 @@ Dos ajustes surgieron de la revisión visual junto con el usuario, no previstos 
 
 ### 6.4 Informe ejecutivo
 
+Se redactó `docs/informe-ejecutivo.md`, un resumen en lenguaje no técnico para un público de negocio, con los mismos hallazgos centrales de este informe (performance, segmentación, explicabilidad, el hallazgo de amplificación de fairness y la limitación de contrafácticos) sin la profundidad metodológica.
+
+---
+
+## 7. Documentación técnica
+
+### 7.1 Alcance
+
+La Tarea 7 formaliza como documentación de repositorio lo que hasta este punto vivía repartido entre notebooks, scripts y este informe: un README de nivel producción, una model card y la arquitectura de decisiones (ADRs y characteristics), ya iniciada desde el arranque del proyecto y mantenida al día en `docs/adr/`, `docs/architecture-characteristics.md` y `docs/architecture-style-selection.md`.
+Por eso este capítulo no repite ese trabajo, documenta lo que se agregó específicamente para el cierre del núcleo académico: la model card y la reescritura del README.
+
+### 7.2 Model card
+
+Se creó `docs/model-card.md` siguiendo el formato de Mitchell et al. (2019), "Model Cards for Model Reporting": detalles del modelo, uso previsto, datos de entrenamiento, métricas de performance, explicabilidad, fairness (con la tabla completa de la sección 5.4 de este informe), limitaciones conocidas y consideraciones éticas/regulatorias.
+Todos los números citados en la model card son una referencia directa a valores ya reportados y verificados en las secciones 4 y 5 de este informe, sin recalcular nada nuevo; el objetivo del documento es ser el punto de entrada único para un auditor o regulador que necesite evaluar performance, fairness y limitaciones del modelo, sin tener que leer el informe completo.
+
+### 7.3 README
+
+Se reescribió `README.md` a un formato de nivel producción: un hook de una frase basado en el hallazgo de fairness (la amplificación de disparidad, no un resumen genérico del proyecto), tres resultados técnicos cuantificados en la portada, un diagrama de arquitectura (Mermaid) que distingue explícitamente qué está implementado (núcleo académico: Data & Feature Store, ML Scoring, XAI, Segmentación, Serving vía Streamlit) de qué es una extensión de portfolio no implementada todavía (API REST, RAG normativo, copiloto agéntico), una tabla de navegación a toda la documentación del repo, y los comandos exactos para reproducir el pipeline completo y levantar el dashboard.
+Se optó deliberadamente por no incluir un GIF de demo, que requeriría grabar y editar video, fuera del alcance de esta sesión de trabajo; queda señalado como pendiente de portfolio, no se simuló ni se dejó un placeholder engañoso.
+
+### 7.4 API docs (FastAPI/OpenAPI)
+
+La documentación de API vía FastAPI/OpenAPI se definió desde el inicio del proyecto como una extensión de portfolio, no como parte del núcleo académico obligatorio.
+No se implementó en esta sesión: el sistema expone sus resultados únicamente a través del dashboard Streamlit de la Tarea 6, no de una API REST.
+Queda como trabajo futuro, junto con el RAG normativo y el copiloto agéntico, consistente con el principio de gestión de scope adoptado para priorizar primero el núcleo académico completo.
+
 El informe ejecutivo en lenguaje no técnico, dirigido a un público de negocio, se redactó en `docs/informe-ejecutivo.md`: resume los resultados del modelo, la segmentación, la explicabilidad, el hallazgo de amplificación de disparidad en fairness y la limitación de los contrafácticos, sin el detalle metodológico de este informe técnico.
