@@ -1,14 +1,29 @@
 """Tarea 6 (prd.md S5): dashboard de visualizacion e informe ejecutivo para
 CrediXAI. Cubre RF-7 (segmentacion, metricas globales, fairness y detalle
 por solicitud) sobre el modelo XGBoost final de la Tarea 4, la segmentacion
-de la Tarea 3 y la explicabilidad/fairness de la Tarea 5.
+de la Tarea 3 y la explicabilidad/fairness de la Tarea 5. Las pestanias
+"Consulta normativa" y "Copiloto" (paso 9, prd.md 9.1) consumen /rag/query y
+/copilot/memo/{sk_id_curr} por HTTP contra la API (credixai.dashboard_client),
+en vez de importar credixai.rag/credixai.copilot directo, para no duplicar
+el setup de Qdrant/OpenRouter/LangGraph dentro de Streamlit.
 
-Requiere haber corrido antes scripts/02_features.py.
+Requiere haber corrido antes scripts/02_features.py. Para las pestanias de
+RAG y copiloto, ademas requiere la API corriendo (uv run uvicorn app.api:app),
+con Qdrant y OPENROUTER_API_KEY configurados (ver README.md).
+
+Levantar con `uv run python app/dashboard_launcher.py`, NO con
+`streamlit run app/dashboard.py` directo: el launcher fuerza el thread pool
+de PyArrow a 1 antes de que streamlit importe pandas (ver comentario en
+app/dashboard_launcher.py), evitando un segfault real reproducido en
+`st.dataframe()`/pandas 3.0 al re-renderizar el script mas de una vez.
 
 Uso:
-    uv run streamlit run app/dashboard.py
+    uv run python app/dashboard_launcher.py
 """
 
+import os
+
+import httpx
 import matplotlib
 
 matplotlib.use("Agg")
@@ -26,8 +41,22 @@ from credixai.dashboard import (
     segment_profile,
     train_full_model,
 )
+from credixai.dashboard_client import query_policy, request_copilot_memo
+
+# pandas 3.0 infiere columnas de texto como "str" (respaldado por PyArrow) por
+# defecto. Complementa el fix de app/dashboard_launcher.py: evita que .map()
+# y asignaciones de columnas de texto pasen por el backend Arrow en primer
+# lugar, en vez de depender unicamente de que el thread pool este a 1.
+pd.set_option("future.infer_string", False)
+
+API_BASE_URL = os.environ.get("CREDIXAI_API_URL", "http://localhost:8000")
 
 st.set_page_config(page_title="CrediXAI - Dashboard", layout="wide")
+
+
+@st.cache_resource
+def get_api_client():
+    return httpx.Client(base_url=API_BASE_URL, timeout=90.0)
 
 
 @st.cache_resource(show_spinner="Entrenando modelo final (una sola vez por sesion)...")
@@ -53,8 +82,8 @@ shap_bundle = get_shap_bundle(bundle)
 
 st.title("CrediXAI - Dashboard de scoring crediticio explicable")
 
-tab_resumen, tab_segmentos, tab_fairness, tab_detalle = st.tabs(
-    ["Resumen ejecutivo", "Segmentacion", "Fairness", "Detalle por solicitud"]
+tab_resumen, tab_segmentos, tab_fairness, tab_detalle, tab_normativa, tab_copiloto = st.tabs(
+    ["Resumen ejecutivo", "Segmentacion", "Fairness", "Detalle por solicitud", "Consulta normativa", "Copiloto"]
 )
 
 with tab_resumen:
@@ -170,3 +199,65 @@ with tab_detalle:
         st.subheader("Reason codes (adverse action)")
         for i, reason in enumerate(application_reason_codes(shap_bundle, row_idx), start=1):
             st.write(f"{i}. {reason}")
+
+with tab_normativa:
+    st.subheader("Consulta normativa (RAG)")
+    st.caption(
+        "Responde preguntas de politica/normativa citando siempre documento y fragmento fuente. "
+        "El corpus (docs/policy_corpus/) son resumenes sinteticos con fines educativos, no el texto "
+        "normativo oficial."
+    )
+    question = st.text_input(
+        "Pregunta", placeholder="¿Cuantos reason codes como maximo se comunican al solicitante?"
+    )
+    if st.button("Consultar", key="consultar_normativa") and question:
+        try:
+            with st.spinner("Buscando en el corpus normativo..."):
+                result = query_policy(get_api_client(), question)
+        except httpx.HTTPError as exc:
+            st.error(
+                f"No se pudo consultar la API en {API_BASE_URL}. "
+                f"Asegurate de tener `uv run uvicorn app.api:app` corriendo, con Qdrant y "
+                f"OPENROUTER_API_KEY configurados. Detalle: {exc}"
+            )
+        else:
+            st.write(result["answer"])
+            st.subheader("Citas")
+            for citation in result["citations"]:
+                st.write(f"**{citation['doc_title']}**: {citation['snippet']}")
+
+with tab_copiloto:
+    st.subheader("Copiloto: memo crediticio")
+    st.caption(
+        "Investiga una solicitud (score, explicacion SHAP y politica aplicable si es alto riesgo) "
+        "y redacta un borrador de memo. Un memo con status 'needs_human_review' no paso la revision "
+        "automatica de calidad dos veces y necesita que una persona lo revise antes de usarlo."
+    )
+    selected_sk_id_copiloto = st.selectbox(
+        "SK_ID_CURR (ordenado de mayor a menor riesgo)",
+        sk_ids_by_risk,
+        format_func=lambda sk_id: f"{sk_id}  -  proba={proba_by_sk_id[sk_id]:.4f}",
+        key="copiloto_sk_id",
+    )
+    if st.button("Redactar memo", key="redactar_memo"):
+        try:
+            with st.spinner("Investigando la solicitud y redactando el memo (puede tardar hasta un minuto)..."):
+                result = request_copilot_memo(get_api_client(), int(selected_sk_id_copiloto))
+        except httpx.HTTPError as exc:
+            st.error(
+                f"No se pudo consultar la API en {API_BASE_URL}. "
+                f"Asegurate de tener `uv run uvicorn app.api:app` corriendo, con Qdrant y "
+                f"OPENROUTER_API_KEY configurados. Detalle: {exc}"
+            )
+        else:
+            c1, c2 = st.columns(2)
+            c1.metric("Decision", result["decision"])
+            c2.metric("Status", result["status"])
+            if result["status"] == "needs_human_review":
+                st.warning("Este memo no paso la revision automatica de calidad: requiere revision humana.")
+            st.subheader("Memo")
+            st.write(result["memo"])
+            if result["citations"]:
+                st.subheader("Citas")
+                for citation in result["citations"]:
+                    st.write(f"**{citation['doc_title']}**: {citation['snippet']}")

@@ -32,6 +32,10 @@ services:
       - "8501:8501"
     volumes:
       - ./data/processed:/app/data/processed:ro
+    environment:
+      - CREDIXAI_API_URL=http://api:8000
+    depends_on:
+      - api
 
   # --- Langfuse self-hosteado (paso 7, prd.md 9.1) ---
   # Stack oficial (https://github.com/langfuse/langfuse/blob/main/docker-compose.yml),

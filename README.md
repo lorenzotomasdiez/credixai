@@ -110,7 +110,7 @@ uv run python scripts/05_explainability.py
 Para explorar los resultados de forma interactiva (dashboard con métricas, segmentación, fairness y explicación por solicitud):
 
 ```
-uv run streamlit run app/dashboard.py
+uv run python app/dashboard_launcher.py
 ```
 
 Para levantar la API REST (`/score`, `/explain`, docs interactivas en `/docs`):
@@ -141,6 +141,7 @@ bash tests/smoke/docker_smoke.sh
 `POST /rag/query` responde preguntas de política/normativa (BCRA, Basilea, adverse action, política interna) citando siempre documento y fragmento fuente.
 El corpus (`docs/policy_corpus/`) son resúmenes sintetizados con fines educativos, no el texto normativo oficial.
 Retrieval híbrido (Qdrant + BM25, fusionados con Reciprocal Rank Fusion) y reranking listwise, ambos con un único provider LLM (OpenRouter).
+También disponible desde la pestaña "Consulta normativa" del dashboard (`docs/guia-de-usuario.md`), sin necesidad de usar la API directo.
 
 Requiere `OPENROUTER_API_KEY` (copiar `.env.example` a `.env`) y Qdrant corriendo:
 
@@ -161,6 +162,7 @@ uv run python scripts/07_rag_eval.py
 `POST /copilot/memo/{sk_id_curr}` investiga una solicitud y redacta un borrador de memo crediticio con reason codes y citas de politica.
 Orquestador LangGraph con tool-calling real (patron orchestrator-workers): decide dinamicamente que tools llamar segun el caso (`score_application`, y si es alto riesgo tambien `explain_shap` y `retrieve_policy`), todas via HTTP contra esta misma API en vez de imports directos.
 Un loop evaluator-optimizer (precheck deterministico + juez LLM) revisa el memo antes de entregarlo: si no pasa, se redacta una vez mas con el feedback; si vuelve a fallar, la respuesta queda en `status: needs_human_review` en vez de reintentar indefinidamente.
+Tambien disponible desde la pestania "Copiloto" del dashboard (`docs/guia-de-usuario.md`), sin necesidad de usar la API directo.
 
 Mismos requisitos que RAG normativo (Qdrant + `OPENROUTER_API_KEY`), mas el modelo ya entrenado:
 

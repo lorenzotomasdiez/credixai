@@ -569,7 +569,7 @@ TDD en sentido literal (test que falla, código que lo hace pasar) no aplica a u
 El equivalente adoptado fue un contrato de smoke test escrito primero (`tests/smoke/docker_smoke.sh`): build exitoso de ambas imágenes, healthcheck en verde de la API en `/health` y del dashboard en `/_stcore/health` (endpoint nativo de Streamlit), ambas con `data/processed` montado como volumen de solo lectura.
 Se corrió el script antes de escribir los Dockerfiles y falló por la razón esperada (`Dockerfile.api: no such file or directory`, es decir, el "rojo" de este contrato); recién después se escribieron `Dockerfile.api` y `Dockerfile.dashboard` hasta que el script pasó en verde.
 
-**Diseño:** dos imágenes separadas, una por proceso (`Dockerfile.api` para `uvicorn app.api:app`, `Dockerfile.dashboard` para `streamlit run app/dashboard.py`), consistente con el estilo service-based ya elegido (`docs/architecture-style-selection.md`) en vez de un único contenedor con dos procesos.
+**Diseño:** dos imágenes separadas, una por proceso (`Dockerfile.api` para `uvicorn app.api:app`, `Dockerfile.dashboard` para el dashboard Streamlit), consistente con el estilo service-based ya elegido (`docs/architecture-style-selection.md`) en vez de un único contenedor con dos procesos.
 Ambas imágenes parten de `python:3.12-slim`, instalan dependencias con `uv sync --frozen` (reproducible por `uv.lock`) y copian solo `src/` y `app/`, sin `data/`, `notebooks/` ni `tests/` (excluidos vía `.dockerignore`).
 `data/processed` no se incorpora a la imagen: al estar versionado con DVC y no con git, se monta como volumen en runtime; esto además mantiene las imágenes reproducibles con independencia del dataset.
 `docker-compose.yml` levanta ambos servicios con los puertos y el volumen ya configurados (`docker compose up --build`).
@@ -750,3 +750,26 @@ La más marcada es `bb_no_record` (PSI≈1.55, el flag de "sin historial en `bur
 Le siguen `AMT_REQ_CREDIT_BUREAU_QRT` y `AMT_REQ_CREDIT_BUREAU_MON` (cantidad de consultas al buró de crédito en el último trimestre/mes, PSI 0.36 y 0.22) y el par complementario `NAME_CONTRACT_TYPE_Cash loans`/`NAME_CONTRACT_TYPE_Revolving loans` (PSI≈0.21 ambos, misma magnitud por ser proporciones complementarias): la proporción de tipo de contrato difiere entre las dos poblaciones.
 Las 295 columnas restantes, incluidas las más predictivas del modelo (`EXT_SOURCE_1/2/3`), no muestran drift significativo.
 El resultado es interpretable y no artificial: son diferencias de composición real entre el split de entrenamiento y el de test de la competencia de Kaggle, no ruido ni un artefacto del cálculo, y el mecanismo de alerta (PSI>0.2) se valida funcionando sobre datos genuinos, sin necesidad de fabricar un escenario de drift.
+
+### 8.9 UI de RAG y copiloto en el dashboard
+
+Noveno paso, no contemplado en el alcance original de las extensiones de portfolio.
+Surgió al revisar, después de cerrar el paso 8, qué le faltaba al sistema desde la perspectiva de un usuario final sin conocimiento técnico: RAG normativo (paso 5) y el copiloto (paso 6) solo eran alcanzables por API/Swagger, sin ninguna pantalla, mientras que el dashboard Streamlit de la Tarea 6 seguía igual desde entonces.
+
+**Diseño, antes de escribir código.**
+La decisión de arquitectura era si el dashboard debía llamar a `/rag/query` y `/copilot/memo/{sk_id_curr}` por HTTP, o reimplementar esa lógica importando `credixai.rag`/`credixai.copilot` directo (como ya hace el dashboard con el modelo XGBoost, sin pasar por la API).
+Se optó por HTTP, mismo principio ya usado por las tools del copiloto (`credixai/copilot/tools.py`): reimplementar el copiloto dentro de Streamlit hubiera significado duplicar el setup de Qdrant, OpenRouter y el grafo async de LangGraph, sin necesidad, dado que dashboard y API ya corren como dos procesos separados en el flujo normal del proyecto.
+
+**TDD.**
+`credixai/dashboard_client.py` (`query_policy`, `request_copilot_memo`, dos envoltorios finos sobre `httpx.Client`) se testeó con `httpx.MockTransport`, respuestas simuladas sin red real, antes de tocar `app/dashboard.py`.
+Dos pestañas nuevas ("Consulta normativa", "Copiloto") se agregaron al dashboard, sin test automatizado, mismo criterio ya documentado para el resto de `app/dashboard.py`: requieren runtime completo y se verifican manualmente.
+
+**Bug real encontrado y corregido: segfault preexistente, no relacionado con el código nuevo.**
+Al verificar manualmente en el navegador, un click en "Redactar memo" hizo caer el proceso de Streamlit entero ("Connection error", sin traceback visible para el usuario).
+La reproducción inicial descartó el código nuevo: la misma llamada a la API, con el mismo set de imports que carga el dashboard (`pandas`, `shap`, `matplotlib`), corrida fuera de Streamlit, no falló.
+Como no hay forma de automatizar un click de navegador en este entorno, se usó `streamlit.testing.v1.AppTest` (el framework de testing headless oficial de Streamlit) para reproducir el crash con un traceback real, algo que un click manual no puede dar: el segfault (`Fatal Python error: Segmentation fault`, confirmado con `faulthandler`) ocurría en la pestaña "Segmentación" preexistente, sin relación con el código de este paso, en el *segundo* re-render completo del script, algo que Streamlit dispara en cualquier interacción con cualquier widget.
+La causa raíz, aislada por eliminación sistemática de hipótesis (orden de imports, `pandas.Series.map`, `future.infer_string`, `OMP_NUM_THREADS`), resultó ser el thread pool interno de PyArrow: pandas 3.0 lo inicializa con el valor por defecto (multi-core) al importarse, y ese pool no tolera que Streamlit destruya y recree el thread del script en cada re-render.
+Como el CLI de Streamlit importa pandas como parte de su propio arranque, antes de ejecutar el script del usuario, la corrección no podía vivir dentro de `app/dashboard.py`: `pyarrow.set_cpu_count(1)` ahí siempre llega demasiado tarde, el pool ya existe.
+Se creó `app/dashboard_launcher.py`, un lanzador que fuerza el thread pool de PyArrow a 1 antes de importar Streamlit, y se actualizaron el comando documentado (`README.md`, `docs/guia-de-usuario.md`) y `Dockerfile.dashboard` para usarlo en vez de `streamlit run app/dashboard.py` directo.
+Verificado estable con `AppTest`: 5 re-renders consecutivos y el flujo completo de las pestañas nuevas contra la API real, sin crash; verificado también que la imagen Docker reconstruida con el nuevo lanzador levanta sana.
+Este hallazgo es otro caso, como el bug de `tool_calls` del paso 6, de un defecto que ninguna suite de tests con datos sintéticos hubiera atrapado: el dashboard nunca tuvo tests automatizados (requiere runtime completo, documentado desde la Tarea 6), así que un bug preexistente de dos re-renders quedó sin detectar hasta que este paso agregó una razón real para interactuar con el dashboard más de una vez seguida.

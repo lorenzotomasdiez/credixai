@@ -254,6 +254,7 @@ El orden que sigue está definido por dependencia técnica real entre componente
 6. **Copiloto agéntico (LangGraph).** (Completado 2026-07-16.) Depende de RAG (paso 5) y de las tools ML/XAI ya existentes, idealmente ya expuestas como endpoints FastAPI (paso 2) en vez de imports directos.
 7. **Observabilidad LLM (Langfuse).** Se integra junto con el copiloto agéntico (paso 6), del que traza las llamadas a LLM; no tiene objeto antes de que exista un agente que producir trazas. (Completado 2026-07-16.)
 8. **Monitoreo de drift (Evidently).** Depende de tener un flujo de scoring real corriendo (FastAPI, paso 2) sobre el cual medir drift a lo largo del tiempo; es el último eslabón porque necesita datos generados por los pasos anteriores. (Completado 2026-07-16.)
+9. **UI de RAG y copiloto en el dashboard.** No estaba en el alcance original de las extensiones de portfolio; surgió al revisar qué le faltaba al sistema desde la perspectiva de un usuario final sin conocimiento técnico. Depende de RAG (paso 5) y el copiloto (paso 6) ya expuestos como endpoints (paso 2). (Completado 2026-07-16.)
 
 ## 10. Riesgos y mitigaciones
 
