@@ -467,3 +467,28 @@ Como trabajo futuro, se identifican dos caminos: generar contrafácticos solo so
 
 El cálculo de SHAP, los reason codes y la auditoría de fairness se transcribieron a `src/credixai/explainability.py` (`compute_shap`, `mean_abs_shap`, `reason_codes`, `fairness_report`) y a un script ejecutable `scripts/05_explainability.py` (`uv run python scripts/05_explainability.py`), verificado end-to-end: reprodujo de forma exacta el ranking SHAP, los reason codes y las métricas de fairness obtenidas en el notebook.
 Los contrafácticos con DiCE quedan únicamente en `notebooks/05_xai.ipynb` como prueba de concepto de la técnica, dada la limitación de compatibilidad con NaN documentada en la sección 5.5: no se formalizaron en `src/` ni en el script, para no ofrecer como funcionalidad de producción algo que no es fiable para la población que más lo necesitaría.
+
+## 6. Visualización e informe ejecutivo (`app/dashboard.py`)
+
+### 6.1 Alcance y arquitectura
+
+El dashboard se construyó con Streamlit y cubre las cuatro vistas requeridas: métricas globales del modelo, segmentación, auditoría de fairness y detalle por solicitud (probabilidad + SHAP + reason codes).
+La lógica de carga y preparación de datos se separó en `src/credixai/dashboard.py`, reutilizando sin duplicar las funciones ya formalizadas en `credixai.modeling`, `credixai.clustering` y `credixai.explainability` (Tareas 3, 4 y 5); `app/dashboard.py` queda como entrypoint delgado, siguiendo el mismo patrón de separación entre lógica reutilizable y script/entrypoint usado en las tareas anteriores.
+El modelo final y la muestra para SHAP se calculan una sola vez por sesión mediante `st.cache_resource`, evitando reentrenar en cada interacción del usuario con la app.
+
+### 6.2 Verificación
+
+Antes de pedir al usuario que corriera la app, se verificaron por separado las funciones de datos de `src/credixai/dashboard.py` (fuera de Streamlit): las métricas de holdout, el umbral de decisión, el perfil de los 5 segmentos y las métricas de fairness por género y edad coincidieron de forma exacta con los valores ya validados en las Tareas 3, 4 y 5.
+La app se probó también con el framework de testing de Streamlit (`AppTest`), confirmando que las cuatro pestañas cargan sin excepciones.
+El usuario corrió la app en su navegador (`uv run streamlit run app/dashboard.py`) y confirmó visualmente las cuatro pestañas: resumen ejecutivo, segmentación, fairness y detalle por solicitud, incluida la navegación entre distintas solicitudes y la explicación SHAP de un caso de alto riesgo (proba=0.7102, por encima del umbral 0.2114).
+
+### 6.3 Ajustes de usabilidad tras la revisión visual
+
+Dos ajustes surgieron de la revisión visual junto con el usuario, no previstos en el diseño inicial:
+
+1. El gráfico waterfall de SHAP se generaba con fondo blanco de matplotlib por defecto, lo que contrastaba mal con el tema oscuro del dashboard; se ajustó a un estilo oscuro (`dark_background`, fondo `#0e1117`) consistente con el resto de la interfaz.
+2. El selector de solicitud (`SK_ID_CURR`) no permitía saber la probabilidad de una solicitud sin elegirla primero, dificultando encontrar un caso de alto riesgo a propósito para probar los reason codes; se resolvió ordenando el selector de mayor a menor probabilidad de default y mostrando la probabilidad junto a cada ID, de forma que el primer ítem de la lista es siempre el de mayor riesgo.
+
+### 6.4 Informe ejecutivo
+
+El informe ejecutivo en lenguaje no técnico, dirigido a un público de negocio, se redactó en `docs/informe-ejecutivo.md`: resume los resultados del modelo, la segmentación, la explicabilidad, el hallazgo de amplificación de disparidad en fairness y la limitación de los contrafácticos, sin el detalle metodológico de este informe técnico.
